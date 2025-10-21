@@ -1,0 +1,1917 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>منصة مدرسة الراشدون</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+  <!-- مكتبات الطباعة و QR -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+  <style>
+/* تحسين التوافق مع الجوال */
+@media (max-width: 640px) {
+  body {
+    font-size: 15px;
+    padding-bottom: 70px;
+  }
+
+  header .text-xs, header .text-sm {
+    font-size: 13px;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+  }
+
+  .section-card {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-card h2 {
+    font-size: 1rem;
+  }
+
+  .link-item {
+    padding: 8px;
+  }
+
+  .link-item a {
+    font-size: 0.85rem;
+  }
+
+  .link-item svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  #print-all-btn, #login-admin-btn {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+
+  footer {
+    font-size: 0.75rem;
+  }
+
+  .usage-bar {
+    height: 8px;
+  }
+
+  /* جعل الأزرار أكثر سهولة باللمس */
+  button, .add-link-btn, .delete-section-btn, .print-section-btn {
+    min-height: 36px;
+  }
+}
+
+    body { font-family: 'Cairo', sans-serif; background-color: #f7fafc; }
+    .section-card { transition: transform .3s ease, box-shadow .3s ease; }
+    .section-card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05); }
+    .modal { display: none; transition: opacity .3s ease; }
+    .modal.show { display: flex; }
+    .link-item { transition: background-color .2s ease; }
+    .link-item:hover { background-color: #edf2f7; }
+    .draggable { cursor: grab; }
+    .sortable-ghost { opacity: .4; background: #c7d2fe; }
+
+    /* جذر الطباعة عبر html2canvas → PDF */
+    .printable-offscreen {
+      position: absolute;
+      left: -99999px; top: 0;
+      width: 842px; /* تقريب عرض A4 بالبكسل */
+      background: #fff; color: #111827; padding: 24px;
+    }
+    .print-header {
+      display: grid;
+      grid-template-columns: 1fr 2fr 1fr;
+      align-items: center; gap: 16px; margin-bottom: 16px;
+    }
+    .header-logo { width: 110px; height: 60px; display:flex; align-items:center; justify-content:center; }
+    .header-center p { margin: 2px 0; }
+
+    .table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .table th, .table td { border: 1px solid #e5e7eb; padding: 8px; vertical-align: middle; }
+    .table thead th { background: #065f46; color: #fff; text-align: center; font-weight: 700; }
+    .qr-box { width: 80px; height: 80px; display: inline-flex; align-items: center; justify-content: center; }
+    .section-title-print {
+      font-size: 22px;
+      font-weight: 700;
+      color: #054e38;
+      margin-top: 20px;
+      margin-bottom: 12px;
+      padding: 8px;
+      background-color: #f0fdfa;
+      border-right: 5px solid #065f46;
+      border-bottom: 1px solid #d1d5db;
+      border-top: 1px solid #d1d5db;
+      border-radius: 4px 0 0 4px;
+    }
+
+    /* شريط تقدم عداد التخزين */
+    .usage-bar { height: 10px; border-radius: 9999px; width: 100%; background: #e5e7eb; overflow: hidden; }
+    .usage-fill { height: 100%; width: 0%; transition: width .6s ease; }
+
+    .notification-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        width: 18px;
+        height: 18px;
+        background-color: #ef4444;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: bold;
+    }
+    
+    .recording {
+        animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+        100% { transform: scale(1); }
+    }
+
+
+    /* ======== 🔒 منع التمدد الأفقي بالكامل للجوال وجميع الأجهزة ======== */
+    html, body {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    img, video, canvas, svg {
+      max-width: 100%;
+      height: auto;
+    }
+    .container, main, header, footer, section, div {
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+    /* إصلاح داخل عناصر flex حتى لا تتمدد الروابط وتسبب سكرول أفقي */
+    .link-item .flex { min-width: 0; }
+    .link-item a { min-width: 0; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+  <!-- Header -->
+  <header class="bg-white shadow-md sticky top-0 z-10">
+    <div class="bg-green-600 text-white text-center py-2 text-xs md:text-sm">
+      <p>المملكة العربية السعودية</p>
+      <p>وزارة التعليم</p>
+      <p>الإدارة العامة للتعليم بمنطقة عسير</p>
+      <p class="font-bold">ابتدائية ومتوسطة الراشدون بالمربع</p>
+    </div>
+    <div class="container mx-auto px-6 py-3 flex flex-wrap justify-between items-center">
+      <div class="flex items-center space-x-4 space-x-reverse">
+        <!-- School Logo SVG -->
+        <svg class="w-12 h-12 text-green-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 14l9-5-9-5-9 5 9 5z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 14v6.5m-4-6.5v7.5l4-2.222"/>
+        </svg>
+        <h1 class="text-xl md:text-2xl font-bold text-green-800">منصة مدرسة الراشدون</h1>
+      </div>
+      <div class="flex items-center space-x-2 space-x-reverse mt-2 sm:mt-0">
+        <div id="user-info" class="text-sm text-gray-500"></div>
+        <button id="add-section-btn" class="hidden bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">إضافة قسم</button>
+        <div class="relative">
+            <button id="requests-btn" class="hidden bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">طلبات الصلاحيات</button>
+            <div id="requests-badge" class="notification-badge hidden"></div>
+        </div>
+        <button id="admin-panel-btn" class="hidden bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">إدارة المسؤولين</button>
+        <button id="logout-admin-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">تسجيل الخروج</button>
+        <!-- زر تسجيل دخول المدير (دائمًا ظاهر) -->
+        <button id="login-admin-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">تسجيل دخول المدير</button>
+        <!-- زر طباعة كل الأقسام -->
+        <button id="print-all-btn" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 px-4 rounded-lg transition-colors">🖨️ طباعة الأقسام</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container mx-auto px-6 py-8">
+    <div id="loading-spinner" class="text-center py-10">
+      <svg class="animate-spin h-8 w-8 text-teal-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <p class="mt-2 text-gray-600">جاري التحميل...</p>
+    </div>
+
+    <div id="sections-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
+  </main>
+  
+  <!-- NEW: Chat FAB -->
+    <button id="chat-fab" class="fixed bottom-6 left-6 bg-green-600 text-white p-4 rounded-full shadow-lg hover:bg-green-700 transition-transform hover:scale-110 z-20">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+    </button>
+    
+    <!-- NEW: Name Prompt Modal -->
+    <div id="name-prompt-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-75 items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
+            <h2 class="text-xl font-bold mb-4 text-center">أهلاً بك في منصة الراشدون</h2>
+            <p class="text-center text-gray-600 mb-6">الرجاء إدخال اسمك للمتابعة.</p>
+            <form id="name-prompt-form">
+                <div class="mb-4">
+                    <label for="user-name-input" class="block text-gray-700 text-sm font-bold mb-2">الاسم:</label>
+                    <input type="text" id="user-name-input" placeholder="مثال: أحمد محمد" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline" required />
+                </div>
+                <div class="text-center">
+                    <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded w-full">حفظ ومتابعة</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+  <!-- Modal: روابط -->
+  <div id="link-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-20">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+      <h2 id="modal-title" class="text-xl font-bold mb-4">إضافة عنصر جديد</h2>
+      <form id="link-form">
+        <input type="hidden" id="modal-section-id" />
+        <input type="hidden" id="modal-link-id" />
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-bold mb-2">العنوان:</label>
+          <input type="text" id="link-title" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline" required />
+        </div>
+        <div class="mb-4">
+          <div class="flex justify-around">
+            <label class="flex items-center">
+              <input type="radio" name="entry-type" value="url" class="form-radio" checked />
+              <span class="ml-2">إضافة رابط</span>
+            </label>
+            <label class="flex items-center">
+              <input type="radio" name="entry-type" value="file" class="form-radio" />
+              <span class="ml-2">رفع ملف</span>
+            </label>
+          </div>
+        </div>
+        <div id="url-input-container" class="mb-6">
+          <label class="block text-gray-700 text-sm font-bold mb-2">الرابط (URL):</label>
+          <input type="url" id="link-url" placeholder="https://example.com" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline" />
+        </div>
+        <div id="file-input-container" class="mb-6 hidden">
+          <label class="block text-gray-700 text-sm font-bold mb-2">اختر ملف:</label>
+          <input type="file" id="link-file" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline" />
+        </div>
+        <p id="edit-file-note" class="text-sm text-gray-500 mb-4 hidden">لتغيير الملف، يرجى حذف العنصر الحالي وإضافة عنصر جديد.</p>
+        <div id="upload-progress-container" class="w-full bg-gray-200 rounded-full h-2.5 mb-4 hidden">
+          <div id="upload-progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+        </div>
+        <div class="flex items-center justify-end space-x-4 space-x-reverse">
+          <button type="button" id="modal-cancel" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">إلغاء</button>
+          <button type="submit" id="modal-save" class="bg-teal-500 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded">حفظ</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: إضافة قسم -->
+  <div id="section-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-20">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+      <h2 class="text-xl font-bold mb-4">إضافة قسم جديد</h2>
+      <form id="section-form">
+        <div class="mb-4">
+          <label class="block text-gray-700 text-sm font-bold mb-2">عنوان القسم:</label>
+          <input type="text" id="section-title" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline" required />
+        </div>
+        <div class="mb-4">
+          <label class="flex items-center">
+            <input type="checkbox" id="section-private" class="form-checkbox h-5 w-5 text-blue-600" />
+            <span class="mr-2 text-gray-700">اجعل هذا القسم خاصًا (مرئي للمسؤولين فقط)</span>
+          </label>
+        </div>
+        <div class="flex items-center justify-end space-x-4 space-x-reverse">
+          <button type="button" id="section-modal-cancel" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">إلغاء</button>
+          <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">إضافة القسم</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: إدارة المسؤولين -->
+  <div id="admin-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-30">
+    <div class="bg-white rounded-lg shadow-xl p-6 و-full max-w-2xl mx-4 h-full max-h-[90vh] flex flex-col">
+      <h2 class="text-xl font-bold mb-4 flex-shrink-0">إدارة المسؤولين</h2>
+      <div class="flex-grow overflow-y-auto pr-2">
+        <div class="mb-6 bg-yellow-50 border-r-4 border-yellow-400 p-4 rounded">
+          <h3 class="font-bold text-yellow-800">المدير العام (Super Admin)</h3>
+          <p id="super-admin-id" class="font-mono text-sm text-yellow-700 mt-1 select-all"></p>
+        </div>
+        <div id="add-admin-container">
+          <form id="add-admin-form" class="mb-6">
+            <h3 class="font-bold text-gray-700 mb-2">إضافة مسؤول قسم جديد</h3>
+            <div class="flex items-start mb-2">
+              <input type="text" id="new-admin-id" placeholder="الصق معرف المستخدم هنا" class="shadow appearance-none border rounded-l w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline" />
+              <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-r h-[40px]">إضافة</button>
+            </div>
+            <div class="mb-2">
+              <label class="block text-gray-700 text-sm font-bold mb-2">صلاحيات الوصول للأقسام:</label>
+              <div id="new-admin-permissions" class="space-y-1 max-h-32 overflow-y-auto bg-gray-50 p-2 rounded border"></div>
+            </div>
+          </form>
+        </div>
+        <div>
+          <h3 class="font-bold text-gray-700">قائمة مسؤولي الأقسام:</h3>
+          <div id="admin-list" class="mt-2 space-y-4"></div>
+        </div>
+      </div>
+      <div class="flex items-center justify-end mt-4 flex-shrink-0">
+        <button type="button" id="admin-modal-close" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- مودال تسجيل دخول المدير -->
+  <div id="login-admin-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-40">
+    <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
+      <h2 class="text-xl font-bold mb-4 text-center text-green-700">تسجيل دخول المدير</h2>
+      <form id="login-admin-form">
+        <div class="mb-4">
+          <label for="admin-password" class="block text-gray-700 text-sm font-bold mb-2">الرمز السري:</label>
+          <input type="password" id="admin-password" placeholder="أدخل الرمز السري" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline" required />
+        </div>
+        <div id="admin-login-error" class="text-red-500 text-sm mb-4 hidden">الرمز السري غير صحيح.</div>
+        <div class="flex items-center justify-end space-x-4 space-x-reverse">
+          <button type="button" id="cancel-admin-login" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">إلغاء</button>
+          <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">دخول</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+    <!-- NEW: Requests Modal -->
+    <div id="requests-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-30">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 h-full max-h-[90vh] flex flex-col">
+            <h2 class="text-xl font-bold mb-4 flex-shrink-0">طلبات الصلاحيات المعلقة</h2>
+            <div id="requests-list" class="flex-grow overflow-y-auto pr-2 space-y-3">
+                <!-- Requests will be populated here -->
+            </div>
+            <div class="flex items-center justify-end mt-4 flex-shrink-0">
+                <button type="button" id="requests-modal-close" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">إغلاق</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NEW: Chat Modal -->
+    <div id="chat-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-30">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 h-full max-h-[70vh] flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center">
+                <h2 id="chat-with-title" class="text-lg font-bold">الدردشة مع المدير</h2>
+                <button id="chat-modal-close" class="text-gray-500 hover:text-gray-800">&times;</button>
+            </div>
+            <div id="chat-messages" class="flex-grow p-4 overflow-y-auto space-y-4">
+                <!-- Messages will be populated here -->
+            </div>
+            <div class="p-4 border-t">
+                 <div id="emoji-panel" class="hidden bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-2 w-64 mb-2">
+                    <!-- Emojis will be populated here -->
+                </div>
+                <form id="chat-form" class="flex items-center space-x-2 space-x-reverse">
+                     <button type="button" id="record-audio-btn" class="text-gray-500 hover:text-gray-700 p-2 rounded-full">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                    </button>
+                    <button type="button" id="emoji-btn" class="text-gray-500 hover:text-gray-700 p-2 rounded-full">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                    <input id="chat-input" type="text" class="flex-grow border rounded-full py-2 px-4" placeholder="اكتب رسالتك..." required>
+                    <button type="submit" class="bg-green-600 text-white rounded-full p-3 flex-shrink-0">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NEW: Admin Chat List Modal -->
+    <div id="admin-chat-list-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-30">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4 h-full max-h-[80vh] flex flex-col">
+            <h2 class="text-xl font-bold mb-4 flex-shrink-0">محادثات المستخدمين</h2>
+            <div id="admin-chat-list" class="flex-grow overflow-y-auto pr-2 space-y-2">
+                <!-- User chat list will be populated here -->
+            </div>
+            <div class="flex items-center justify-end mt-4 flex-shrink-0">
+                <button type="button" id="admin-chat-list-modal-close" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+
+  <!-- جذر الطباعة الخفي -->
+  <div id="print-root" class="printable-offscreen" dir="rtl"></div>
+
+  <!-- عداد مساحة التخزين (أسفل الصفحة) -->
+  <footer class="container mx-auto px-6 pb-8">
+    <div id="storage-usage" class="mt-8 bg-white border rounded-xl p-4 shadow-sm" style="display: none;">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm font-bold text-gray-700">💾 مساحة التخزين المستخدمة</div>
+        <div id="usage-text" class="text-xs text-gray-500">جارِ الحساب...</div>
+      </div>
+      <div class="usage-bar">
+        <div id="usage-fill" class="usage-fill"></div>
+      </div>
+      <div class="flex justify-between items-center">
+        <div id="usage-hint" class="text-[11px] text-gray-500 mt-2">يتم احتساب الملفات داخل <span class="font-mono bg-gray-100 px-1 rounded">uploads/</span> فقط.</div>
+        <button id="recalculate-storage-btn" class="hidden text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold py-1 px-3 rounded mt-2">إعادة حساب المساحة</button>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc,
+      query, orderBy, getDocs, limit, writeBatch, deleteField, serverTimestamp, where, collectionGroup, increment
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import {
+      getStorage, ref, uploadBytes, getDownloadURL,
+      listAll, getMetadata, deleteObject, uploadBytesResumable
+    } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+
+    const { jsPDF } = window.jspdf;
+
+    /* ======================= Firebase Config ======================= */
+    const firebaseConfig = {
+      apiKey: "AIzaSyCZmXjO0KNN6NC4W8TLlBrIXucBtwkoJ4E",
+      authDomain: "my-school-1cda8.firebaseapp.com",
+      projectId: "my-school-1cda8",
+      storageBucket: "my-school-1cda8.appspot.com",
+      messagingSenderId: "862550723171",
+      appId: "1:862550723171:web:8760a747247050ca498656"
+    };
+
+    const appId = firebaseConfig.projectId;
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    /* ======================= State ======================= */
+    let currentUser = null;
+    let userRoles = { isSuperAdmin: false, isSectionAdmin: false, managedSections: [] };
+    let sectionsData = [];
+    let sortable = null;
+    let currentChatUnsubscribe = null;
+    let currentChatUserId = null;
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+    let linkUnsubscribes = {}; // For managing link listeners
+    let mainUnsubscribes = []; // For managing top-level listeners
+
+
+    /* ======================= DOM ======================= */
+    const sectionsGrid = document.getElementById('sections-grid');
+    const loadingSpinner = document.getElementById('loading-spinner');
+
+    const linkModal = document.getElementById('link-modal');
+    const linkForm = document.getElementById('link-form');
+    const modalTitle = document.getElementById('modal-title');
+    const modalSectionIdInput = document.getElementById('modal-section-id');
+    const modalLinkIdInput = document.getElementById('modal-link-id');
+    const linkTitleInput = document.getElementById('link-title');
+    const linkUrlInput = document.getElementById('link-url');
+    const linkFileInput = document.getElementById('link-file');
+    const urlInputContainer = document.getElementById('url-input-container');
+    const fileInputContainer = document.getElementById('file-input-container');
+    const uploadProgressContainer = document.getElementById('upload-progress-container');
+    const uploadProgressBar = document.getElementById('upload-progress-bar');
+    const editFileNote = document.getElementById('edit-file-note');
+
+
+    const sectionModal = document.getElementById('section-modal');
+    const sectionForm = document.getElementById('section-form');
+    const sectionTitleInput = document.getElementById('section-title');
+    const sectionPrivateCheckbox = document.getElementById('section-private');
+    const addSectionBtn = document.getElementById('add-section-btn');
+
+    const adminModal = document.getElementById('admin-modal');
+    const adminPanelBtn = document.getElementById('admin-panel-btn');
+    const addAdminForm = document.getElementById('add-admin-form');
+    const newAdminIdInput = document.getElementById('new-admin-id');
+    const adminListDiv = document.getElementById('admin-list');
+
+    const loginAdminBtn = document.getElementById('login-admin-btn');
+    const logoutAdminBtn = document.getElementById('logout-admin-btn');
+    const loginAdminModal = document.getElementById('login-admin-modal');
+    const adminLoginForm = document.getElementById('login-admin-form');
+    const adminLoginError = document.getElementById('admin-login-error');
+    const cancelAdminLogin = document.getElementById('cancel-admin-login');
+
+    const printAllBtn = document.getElementById('print-all-btn');
+    const printRoot = document.getElementById('print-root');
+
+    // عداد التخزين
+    const usageTextEl = document.getElementById('usage-text');
+    const usageFillEl = document.getElementById('usage-fill');
+    const storageUsageEl = document.getElementById('storage-usage');
+    const recalculateStorageBtn = document.getElementById('recalculate-storage-btn');
+    
+    // New DOM elements for requests and chat
+    const requestsBtn = document.getElementById('requests-btn');
+    const requestsBadge = document.getElementById('requests-badge');
+    const requestsModal = document.getElementById('requests-modal');
+    const requestsList = document.getElementById('requests-list');
+    
+    const chatFab = document.getElementById('chat-fab');
+    const chatModal = document.getElementById('chat-modal');
+    const chatMessages = document.getElementById('chat-messages');
+    const chatForm = document.getElementById('chat-form');
+    const chatInput = document.getElementById('chat-input');
+    const chatWithTitle = document.getElementById('chat-with-title');
+    const adminChatListModal = document.getElementById('admin-chat-list-modal');
+    const adminChatList = document.getElementById('admin-chat-list');
+    const namePromptModal = document.getElementById('name-prompt-modal');
+    const namePromptForm = document.getElementById('name-prompt-form');
+    const userNameInput = document.getElementById('user-name-input');
+    const emojiBtn = document.getElementById('emoji-btn');
+    const emojiPanel = document.getElementById('emoji-panel');
+    const recordAudioBtn = document.getElementById('record-audio-btn');
+    
+    /* ======================= Audio Notifications ======================= */
+    let audioCtx;
+
+    function playNotificationSound() {
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.type = 'triangle';
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
+        gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
+
+        oscillator.start(audioCtx.currentTime);
+        oscillator.stop(audioCtx.currentTime + 0.2);
+    }
+
+    // Initialize AudioContext on first user interaction to comply with browser policies
+    function initAudio() {
+        if (!audioCtx) {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            } catch(e) {
+                console.error("Web Audio API is not supported in this browser");
+            }
+        }
+    }
+    // Attach the initializer to a user gesture
+    document.body.addEventListener('click', initAudio, { once: true });
+
+
+    /* ======================= Helpers ======================= */
+    const defaultIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-gray-500"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+    const iconPool = [
+      `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-cyan-500"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-orange-500"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-indigo-500"><path d="m9 12 2 2 4-4"/><path d="M5 7c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z"/></svg>`,
+    ];
+    
+    /* ============= بناء بطاقات الأقسام (مع زر طباعة القسم) ============= */
+    function createSectionHTML(sectionDoc) {
+      const section = sectionDoc.data();
+      const canManage = userRoles.isSuperAdmin || userRoles.managedSections.includes(section.collectionName);
+
+      const deleteBtn = userRoles.isSuperAdmin
+        ? `<button class="delete-section-btn text-gray-400 hover:text-red-500 p-1" data-id="${sectionDoc.id}" data-title="${section.title}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            </button>` : '';
+            
+    const requestPermissionBtn = (!userRoles.isSuperAdmin && !canManage)
+        ? `<div class="mt-4"><button class="request-permission-btn w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition" data-section-id="${section.collectionName}" data-section-title="${section.title}">طلب صلاحية تحكم</button></div>`
+        : '';
+
+
+      const addLinkBtn = canManage
+        ? `<div class="mt-4"><button class="add-link-btn w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg transition" data-section="${section.collectionName}">إضافة عنصر</button></div>`
+        : '';
+
+      const privateIcon = section.isPrivate
+        ? `<svg class="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm-2.5 8V5.5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5V9h-5z" clip-rule="evenodd" /></svg>`
+        : '';
+
+      const printThisSectionBtn = `
+        <button class="print-section-btn text-emerald-700 hover:text-emerald-900 font-bold text-sm bg-emerald-50 px-2 py-1 rounded flex items-center space-x-1 space-x-reverse"
+                data-id="${sectionDoc.id}" data-title="${section.title}" data-collection="${section.collectionName}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            <span>طباعة</span>
+        </button>`;
+
+      return `
+        <div data-id="${sectionDoc.id}" class="section-card bg-white p-6 rounded-xl shadow-lg flex flex-col">
+            <div class="flex justify-between items-start mb-4 gap-4">
+                <div class="flex items-center space-x-4 space-x-reverse min-w-0">
+                    ${section.icon || defaultIcon}
+                    <h2 class="text-xl font-bold text-gray-700 flex items-center min-w-0">
+                        ${privateIcon}
+                        <span class="section-title-bg truncate" title="${section.title}">${section.title}</span>
+                    </h2>
+                </div>
+                <div class="flex items-center space-x-1 space-x-reverse flex-shrink-0">
+                    ${printThisSectionBtn}
+                    ${deleteBtn}
+                </div>
+            </div>
+            <div id="${section.collectionName}" class="link-list space-y-3 flex-grow">
+                <p class="text-gray-500 empty-list-msg">لا توجد عناصر حاليًا.</p>
+            </div>
+            ${addLinkBtn}
+            ${requestPermissionBtn}
+        </div>`;
+    }
+
+    function createLinkItemHTML(docSnap, sectionCollectionName) {
+      const data = docSnap.data();
+      const canManage = userRoles.isSuperAdmin || userRoles.managedSections.includes(sectionCollectionName);
+
+      let adminControls = '';
+      if (canManage) {
+        adminControls = `
+          <button class="edit-link-btn p-2 text-blue-500 hover:text-blue-700 rounded-full hover:bg-gray-200"
+                  data-id="${docSnap.id}" data-type="${data.type || 'url'}" data-title="${data.title}" data-url="${data.url}">
+            <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
+          </button>
+          <button class="delete-link-btn p-2 text-red-500 hover:text-red-700 rounded-full hover:bg-gray-200" data-id="${docSnap.id}">
+            <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg>
+          </button>`;
+      }
+
+      const linkIcon = data.type === 'file'
+        ? `<svg class="w-5 h-5 text-indigo-600 ml-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>`
+        : `<svg class="w-5 h-5 text-teal-600 ml-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>`;
+
+      const shareText = encodeURIComponent(`${data.title}\n${data.url}`);
+      const whatsappShareButton = `
+        <a href="https://api.whatsapp.com/send?text=${shareText}" target="_blank" rel="noopener noreferrer"
+           class="p-2 rounded-full hover:bg-gray-200 text-green-600 flex items-center justify-center transition-colors" title="مشاركة عبر واتساب">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.487 5.235 3.487 8.413.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 4.318 1.738 6.088l.249.448-1.152 4.224 4.273-1.124.416.249z"/></svg>
+        </a>`;
+
+      return `
+        <div class="link-item flex items-center justify-between p-2 rounded-md border">
+          <div class="flex items-center min-w-0 flex-1">
+            ${linkIcon}
+            <a href="${data.url}" target="_blank" rel="noopener noreferrer" class="font-semibold text-gray-700 hover:text-teal-600 truncate" title="${data.title}">${data.title}</a>
+          </div>
+          <div class="flex-shrink-0 flex items-center space-x-1 space-x-reverse ml-2">
+            ${whatsappShareButton}
+            ${adminControls}
+          </div>
+        </div>`;
+    }
+
+    function renderLinks(sectionCollectionName) {
+      const linkList = document.getElementById(sectionCollectionName);
+      if (linkUnsubscribes[sectionCollectionName]) {
+        linkUnsubscribes[sectionCollectionName]();
+      }
+      if (!linkList) return;
+      const collectionPath = `/artifacts/${appId}/public/data/${sectionCollectionName}`;
+      const q = query(collection(db, collectionPath));
+      linkUnsubscribes[sectionCollectionName] = onSnapshot(q, (snapshot) => {
+        linkList.innerHTML = '<p class="text-gray-500 empty-list-msg" style="display:none;">لا توجد عناصر حاليًا.</p>';
+        if (snapshot.empty) {
+          linkList.querySelector('.empty-list-msg').style.display = 'block';
+        } else {
+          const docs = snapshot.docs.map(d => d);
+          docs.sort((a, b) => (a.data().createdAt?.toMillis() || 0) - (b.data().createdAt?.toMillis() || 0));
+          docs.forEach(docSnap => {
+            const item = document.createElement('div');
+            item.innerHTML = createLinkItemHTML(docSnap, sectionCollectionName);
+            linkList.appendChild(item);
+          });
+        }
+      }, (err) => {
+        console.error(`Error fetching links for ${sectionCollectionName}:`, err);
+        linkList.innerHTML = '<p class="text-red-500">خطأ في تحميل الروابط.</p>';
+      });
+    }
+
+    async function saveOrder() {
+      const batch = writeBatch(db);
+      const sectionElements = sectionsGrid.querySelectorAll('.section-card');
+      sectionElements.forEach((el, index) => {
+        const docId = el.dataset.id;
+        if (docId) {
+          const docRef = doc(db, `/artifacts/${appId}/public/data/sections_config`, docId);
+          batch.update(docRef, { order: index });
+        }
+      });
+      try { await batch.commit(); } catch (e) { console.error('Error saving order:', e); }
+    }
+
+    function renderAllSections(sections) {
+        // Unsubscribe from old link listeners before re-rendering
+        Object.values(linkUnsubscribes).forEach(unsub => unsub());
+        linkUnsubscribes = {};
+
+      let visible = sections;
+      if (!userRoles.isSuperAdmin) {
+        visible = sections.filter(doc => {
+          const sec = doc.data();
+          return !sec.isPrivate || userRoles.managedSections.includes(sec.collectionName);
+        });
+      }
+
+      sectionsGrid.innerHTML = visible.map(createSectionHTML).join('');
+      visible.forEach(secDoc => renderLinks(secDoc.data().collectionName));
+
+      loadingSpinner.style.display = 'none';
+      sectionsGrid.classList.remove('hidden');
+
+      if (userRoles.isSuperAdmin) {
+        if (sortable) sortable.destroy();
+        sortable = new Sortable(sectionsGrid, { animation: 150, ghostClass: 'sortable-ghost', onEnd: saveOrder });
+        document.querySelectorAll('.section-card').forEach(c => c.classList.add('draggable'));
+      } else {
+        if (sortable) sortable.destroy();
+        sortable = null;
+        document.querySelectorAll('.section-card').forEach(c => c.classList.remove('draggable'));
+      }
+    }
+    
+    function updateUserInfoDisplay() {
+        const userInfoEl = document.getElementById('user-info');
+        const userName = localStorage.getItem('userName');
+        if (userName) {
+             userInfoEl.innerHTML = `<div class="text-right">
+                <span class="font-bold">${userName}</span>
+                <button id="edit-name-btn" class="text-xs text-blue-500 hover:underline mr-1">(تغيير)</button>
+             </div>`;
+        } else {
+             userInfoEl.innerHTML = `<div class="text-right">
+                <div class="text-sm">وضع المشاهدة.</div>
+                <div class="mt-1 text-xs text-gray-600">للتعديل، اطلب صلاحية أو تواصل مع المدير.</div>
+            </div>`;
+        }
+    }
+
+
+    function updateUiBasedOnRoles() {
+      const userInfoEl = document.getElementById('user-info');
+      const adminPanelBtnEl = document.getElementById('admin-panel-btn');
+      const addSectionBtnEl = document.getElementById('add-section-btn');
+      const loginAdminBtnEl = document.getElementById('login-admin-btn');
+      const logoutAdminBtnEl = document.getElementById('logout-admin-btn');
+
+      const sessionIsSuper = sessionStorage.getItem('isSuperAdmin') === 'true';
+      if (sessionIsSuper) userRoles.isSuperAdmin = true;
+
+      if (userRoles.isSuperAdmin) {
+        userInfoEl.innerHTML = 'مرحباً أيها المدير العام!';
+        adminPanelBtnEl.classList.remove('hidden');
+        addSectionBtnEl.classList.remove('hidden');
+        loginAdminBtnEl.classList.add('hidden');
+        logoutAdminBtnEl.classList.remove('hidden');
+        requestsBtn.classList.remove('hidden');
+      } else if (userRoles.isSectionAdmin) {
+        userInfoEl.innerHTML = 'مرحباً يا مسؤول القسم!';
+        adminPanelBtnEl.classList.add('hidden');
+        addSectionBtnEl.classList.add('hidden');
+        loginAdminBtnEl.classList.remove('hidden');
+        logoutAdminBtnEl.classList.add('hidden');
+        requestsBtn.classList.add('hidden');
+      } else {
+        updateUserInfoDisplay();
+        adminPanelBtnEl.classList.add('hidden');
+        addSectionBtnEl.classList.add('hidden');
+        loginAdminBtnEl.classList.remove('hidden');
+        logoutAdminBtnEl.classList.add('hidden');
+        requestsBtn.classList.add('hidden');
+      }
+      renderAllSections(sectionsData);
+    }
+
+    function setupSectionsListener() {
+      const sectionsRef = collection(db, `/artifacts/${appId}/public/data/sections_config`);
+      const qSections = query(sectionsRef, orderBy('order', 'asc'));
+      const unsubscribe = onSnapshot(qSections, (snap) => { sectionsData = snap.docs; updateUiBasedOnRoles(); });
+      mainUnsubscribes.push(unsubscribe);
+    }
+
+    function renderAdminManagement(adminData) {
+      document.getElementById('super-admin-id').textContent = adminData.superAdmin || 'غير محدد';
+      const permissionsContainer = document.getElementById('new-admin-permissions');
+      permissionsContainer.innerHTML = sectionsData.map(doc => {
+        const sec = doc.data();
+        const lock = sec.isPrivate ? `<svg class="w-4 h-4 text-gray-400 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm-2.5 8V5.5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5V9h-5z" clip-rule="evenodd"/></svg>` : '';
+        return `<label class="flex items-center"><input type="checkbox" class="form-checkbox" name="permissions" value="${sec.collectionName}"><span class="mr-2 flex items-center">${lock}${sec.title}</span></label>`;
+      }).join('');
+
+      const adminList = document.getElementById('admin-list');
+      adminList.innerHTML = '';
+      const sectionAdmins = adminData.sectionAdmins || {};
+      if (Object.keys(sectionAdmins).length === 0) adminList.innerHTML = '<p class="text-gray-500 p-4 text-center">لا يوجد مسؤولو أقسام حاليًا.</p>';
+      Object.entries(sectionAdmins).forEach(([uid, permissions]) => {
+        const managedTitles = sectionsData.filter(doc => permissions.includes(doc.data().collectionName)).map(doc => doc.data().title).join(', ') || 'لا يوجد';
+        const card = document.createElement('div');
+        card.className = 'p-3 bg-gray-100 rounded';
+        card.innerHTML = `
+          <div class="flex justify-between items-center">
+            <p class="font-mono text-sm select-all">${uid}</p>
+            <button class="remove-admin-btn text-red-500 hover:text-red-700" data-id="${uid}">إزالة</button>
+          </div>
+          <div class="mt-2 text-xs"><span class="font-bold">يتحكم في:</span> <span class="text-gray-600">${managedTitles}</span></div>`;
+        adminList.appendChild(card);
+      });
+    }
+
+    onAuthStateChanged(auth, async (user) => {
+      // Clean up previous listeners
+      mainUnsubscribes.forEach(unsub => unsub());
+      mainUnsubscribes = [];
+      Object.values(linkUnsubscribes).forEach(unsub => unsub());
+      linkUnsubscribes = {};
+      
+      if (user) {
+        currentUser = user;
+        const adminRef = doc(db, `/artifacts/${appId}/public/data/config/admin_doc`);
+        try {
+          const adminDocSnap = await getDoc(adminRef);
+          if (!adminDocSnap.exists()) await setDoc(adminRef, { superAdmin: currentUser.uid, sectionAdmins: {} });
+        } catch (e) { console.error('Error checking/setting admin doc:', e); }
+
+        const sessionIsSuper = sessionStorage.getItem('isSuperAdmin') === 'true';
+        const adminDoc = await getDoc(adminRef);
+        const isAdmin = adminDoc.exists() && (adminDoc.data().superAdmin === currentUser.uid || sessionIsSuper);
+
+        if (!isAdmin && !localStorage.getItem('userName')) {
+            namePromptModal.classList.add('show');
+        }
+
+        const adminUnsubscribe = onSnapshot(adminRef, (adminDoc) => {
+          const adminData = adminDoc.data();
+          userRoles.isSuperAdmin = (adminData?.superAdmin === currentUser.uid) || sessionIsSuper;
+          userRoles.isSectionAdmin = adminData?.sectionAdmins && currentUser.uid in adminData.sectionAdmins;
+          userRoles.managedSections = userRoles.isSectionAdmin ? adminData.sectionAdmins[currentUser.uid] : [];
+
+          if (userRoles.isSuperAdmin) {
+            renderAdminManagement(adminData);
+            storageUsageEl.style.display = 'block';
+            setupStorageUsageListener();
+            setupRequestsListener();
+            setupAdminChatListListener();
+          } else {
+            storageUsageEl.style.display = 'none';
+          }
+
+          updateUiBasedOnRoles();
+        }, (err) => {
+          console.error('Error with admin snapshot:', err);
+          userRoles = { isSuperAdmin: false, isSectionAdmin: false, managedSections: [] };
+          storageUsageEl.style.display = 'none';
+          updateUiBasedOnRoles();
+        });
+        mainUnsubscribes.push(adminUnsubscribe);
+
+        setupSectionsListener();
+
+      } else {
+        // Anonymous user
+        setupSectionsListener();
+        storageUsageEl.style.display = 'none';
+      }
+    });
+
+    /* ======= أحداث واجهة الروابط/الأقسام ======= */
+    sectionsGrid.addEventListener('click', async (e) => {
+      const addBtn = e.target.closest('.add-link-btn');
+      const editBtn = e.target.closest('.edit-link-btn');
+      const deleteLinkBtn = e.target.closest('.delete-link-btn');
+      const deleteSectionBtn = e.target.closest('.delete-section-btn');
+      const printSectionBtn = e.target.closest('.print-section-btn');
+      const requestPermissionBtn = e.target.closest('.request-permission-btn');
+
+
+      if (addBtn) {
+        const sectionCollection = addBtn.dataset.section;
+        if (!userRoles.isSuperAdmin && !userRoles.managedSections.includes(sectionCollection)) return;
+        linkModal.classList.add('show');
+        modalSectionIdInput.value = sectionCollection;
+        modalLinkIdInput.value = '';
+        modalTitle.textContent = 'إضافة عنصر جديد';
+        linkForm.reset();
+        editFileNote.classList.add('hidden');
+        fileInputContainer.classList.remove('hidden');
+        linkFileInput.required = true;
+        linkUrlInput.required = false;
+
+      }
+      if (editBtn) {
+        const sectionCollection = editBtn.closest('.link-list').id;
+        if (!userRoles.isSuperAdmin && !userRoles.managedSections.includes(sectionCollection)) return;
+        const { id, title, url, type } = editBtn.dataset;
+        linkModal.classList.add('show');
+        modalSectionIdInput.value = sectionCollection;
+        modalLinkIdInput.value = id;
+        modalTitle.textContent = 'تعديل العنصر';
+        linkTitleInput.value = title;
+        if (type === 'file') {
+          document.querySelector('input[name="entry-type"][value="file"]').checked = true;
+          fileInputContainer.classList.add('hidden');
+          urlInputContainer.classList.add('hidden');
+          linkFileInput.required = false;
+          editFileNote.classList.remove('hidden');
+        } else {
+          document.querySelector('input[name="entry-type"][value="url"]').checked = true;
+          urlInputContainer.classList.remove('hidden');
+          fileInputContainer.classList.add('hidden');
+          linkUrlInput.value = url;
+          editFileNote.classList.add('hidden');
+        }
+      }
+      if (deleteLinkBtn) {
+            const sectionCollection = deleteLinkBtn.closest('.link-list').id;
+            if (!userRoles.isSuperAdmin && !userRoles.managedSections.includes(sectionCollection)) return;
+            if (confirm('هل أنت متأكد من حذف هذا العنصر؟')) {
+                const linkId = deleteLinkBtn.dataset.id;
+                const docPath = `/artifacts/${appId}/public/data/${sectionCollection}/${linkId}`;
+                const docRef = doc(db, docPath);
+
+                getDoc(docRef).then(async (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        
+                        if (data.type === 'file' && data.url) {
+                            try {
+                                const fileRef = ref(storage, data.url);
+                                await deleteObject(fileRef);
+                            } catch(storageError) {
+                                console.warn("Could not delete file from storage, it might have been already deleted:", storageError);
+                            }
+                        }
+                        
+                        const sizeToDecrement = data.size || 0;
+                        if (sizeToDecrement > 0) {
+                            const storageInfoRef = doc(db, `/artifacts/${appId}/public/data/config/storage_info`);
+                            await setDoc(storageInfoRef, { totalSize: increment(-sizeToDecrement) }, { merge: true });
+                        }
+                    }
+                    
+                    await deleteDoc(docRef);
+                    
+                }).catch(err => {
+                    console.error('Error during deletion process:', err);
+                    alert('حدث خطأ أثناء الحذف.');
+                });
+            }
+        }
+      if (deleteSectionBtn && userRoles.isSuperAdmin) {
+        const sectionTitle = deleteSectionBtn.dataset.title;
+        if (confirm(`هل أنت متأكد من حذف قسم "${sectionTitle}"؟ سيتم حذف جميع العناصر داخله.`)) {
+          const sectionId = deleteSectionBtn.dataset.id;
+          const docPath = `/artifacts/${appId}/public/data/sections_config/${sectionId}`;
+          deleteDoc(doc(db, docPath)).catch(err => console.error('Error deleting section:', err));
+        }
+      }
+      if (printSectionBtn) {
+        const sectionTitle = printSectionBtn.dataset.title;
+        const collectionName = printSectionBtn.dataset.collection;
+        generateSectionsPDF({ mode: 'single', sectionTitle, collectionName });
+      }
+      if (requestPermissionBtn) {
+            const { sectionId, sectionTitle } = requestPermissionBtn.dataset;
+            try {
+                await addDoc(collection(db, `/artifacts/${appId}/public/data/permission_requests`), {
+                    userId: currentUser.uid,
+                    userName: localStorage.getItem('userName') || 'مجهول',
+                    sectionId: sectionId,
+                    sectionTitle: sectionTitle,
+                    status: 'pending',
+                    timestamp: serverTimestamp()
+                });
+                requestPermissionBtn.textContent = 'تم إرسال الطلب';
+                requestPermissionBtn.disabled = true;
+                requestPermissionBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+                requestPermissionBtn.classList.add('bg-gray-400', 'cursor-not-allowed');
+                alert('تم إرسال طلبك للمدير بنجاح.');
+            } catch (err) {
+                console.error('Error sending permission request:', err);
+                alert('حدث خطأ أثناء إرسال الطلب.');
+            }
+        }
+    });
+
+    // تبديل نوع الإدخال
+    document.querySelectorAll('input[name="entry-type"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        if (e.target.value === 'url') {
+          urlInputContainer.classList.remove('hidden');
+          fileInputContainer.classList.add('hidden');
+          linkUrlInput.required = true; linkFileInput.required = false;
+        } else {
+          urlInputContainer.classList.add('hidden');
+          fileInputContainer.classList.remove('hidden');
+          linkUrlInput.required = false; linkFileInput.required = true;
+        }
+      });
+    });
+
+    // حفظ/تعديل عنصر
+    linkForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = linkTitleInput.value.trim();
+        const sectionCollection = modalSectionIdInput.value;
+        const linkId = modalLinkIdInput.value;
+        const entryType = document.querySelector('input[name="entry-type"]:checked').value;
+        const canManage = userRoles.isSuperAdmin || userRoles.managedSections.includes(sectionCollection);
+        if (!title || !sectionCollection || !canManage) return;
+
+        const collectionPath = `/artifacts/${appId}/public/data/${sectionCollection}`;
+
+        if (entryType === 'file') {
+            if(linkId) { // Editing existing file link, only title is changed
+                 try {
+                    await updateDoc(doc(db, collectionPath, linkId), { title });
+                    linkModal.classList.remove('show');
+                 } catch(err) {
+                     console.error("Error updating file title:", err);
+                     alert("خطأ في تحديث العنوان.");
+                 }
+                 return;
+            }
+
+            const file = linkFileInput.files[0];
+            if (!file) { alert('الرجاء اختيار ملف لرفعه.'); return; }
+
+            const storageRef = ref(storage, `uploads/${sectionCollection}/${Date.now()}_${file.name}`);
+            const uploadTask = uploadBytesResumable(storageRef, file);
+            document.getElementById('modal-save').disabled = true;
+            uploadProgressContainer.classList.remove('hidden');
+
+            uploadTask.on('state_changed', 
+                (snapshot) => {
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    uploadProgressBar.style.width = progress + '%';
+                }, 
+                (error) => {
+                    console.error('Upload failed:', error);
+                    alert('فشل رفع الملف.');
+                    document.getElementById('modal-save').disabled = false;
+                    uploadProgressContainer.classList.add('hidden');
+
+                }, 
+                async () => {
+                    try {
+                        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                        const fileSize = uploadTask.snapshot.totalBytes;
+                        const data = { title, url: downloadURL, type: 'file', createdAt: serverTimestamp(), size: fileSize };
+                        
+                        await addDoc(collection(db, collectionPath), data);
+                        
+                        const storageInfoRef = doc(db, `/artifacts/${appId}/public/data/config/storage_info`);
+                        await setDoc(storageInfoRef, { totalSize: increment(fileSize) }, { merge: true });
+
+                        linkModal.classList.remove('show');
+                    } catch (dbError) {
+                        console.error("Error saving file info to DB:", dbError);
+                        alert("فشل حفظ معلومات الملف.");
+                    } finally {
+                        document.getElementById('modal-save').disabled = false;
+                        uploadProgressContainer.classList.add('hidden');
+                        linkForm.reset();
+                    }
+                }
+            );
+            
+        } else { // URL type
+            const url = linkUrlInput.value.trim();
+            if (!url) { alert('الرجاء إدخال رابط.'); return; }
+            const data = { title, url, type: 'url', createdAt: serverTimestamp() };
+            try {
+              if (linkId) await updateDoc(doc(db, collectionPath, linkId), data);
+              else await addDoc(collection(db, collectionPath), data);
+              linkModal.classList.remove('show');
+            } catch (err) { console.error('Error saving link:', err); alert('حدث خطأ أثناء الحفظ.'); }
+        }
+    });
+
+    // إضافة قسم
+    sectionForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title = sectionTitleInput.value.trim();
+      if (!title || !userRoles.isSuperAdmin) return;
+      const newIcon = iconPool[sectionsData.length % iconPool.length] || defaultIcon;
+      const collectionName = title.toLowerCase().replace(/\s+/g, '_').replace(/[^\u0600-\u06FFa-z0-9_]/g, '') + '_' + Date.now();
+      try {
+        await addDoc(collection(db, `/artifacts/${appId}/public/data/sections_config`), {
+          title, icon: newIcon, collectionName, createdAt: serverTimestamp(),
+          order: sectionsData.length, isPrivate: sectionPrivateCheckbox.checked
+        });
+        sectionModal.classList.remove('show'); sectionForm.reset();
+      } catch (err) { console.error('Error adding section:', err); alert('فشل في إضافة القسم.'); }
+    });
+
+    // فتح/إغلاق المودالات
+    linkModal.addEventListener('click', (e) => { if (e.target === linkModal || e.target.closest('#modal-cancel')) { linkModal.classList.remove('show'); linkForm.reset(); } });
+    addSectionBtn.addEventListener('click', () => sectionModal.classList.add('show'));
+    sectionModal.addEventListener('click', (e) => { if (e.target === sectionModal || e.target.closest('#section-modal-cancel')) sectionModal.classList.remove('show'); });
+
+    adminPanelBtn.addEventListener('click', async () => {
+      const adminRef = doc(db, `/artifacts/${appId}/public/data/config/admin_doc`);
+      try {
+        const adminDoc = await getDoc(adminRef);
+        if (adminDoc.exists()) renderAdminManagement(adminDoc.data());
+        adminModal.classList.add('show');
+      } catch (e) { console.error('Error opening admin panel:', e); alert('حدث خطأ أثناء فتح لوحة التحكم.'); }
+    });
+    
+    // Logic for adding and removing admins + closing the modal
+    addAdminForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!userRoles.isSuperAdmin) return;
+        const newAdminUid = newAdminIdInput.value.trim();
+        const selectedPermissions = Array.from(document.querySelectorAll('#new-admin-permissions input:checked')).map(cb => cb.value);
+        if (!newAdminUid || selectedPermissions.length === 0) {
+            alert('الرجاء إدخال معرف المستخدم وتحديد صلاحية قسم واحد على الأقل.');
+            return;
+        }
+
+        const adminRef = doc(db, `/artifacts/${appId}/public/data/config/admin_doc`);
+        try {
+            await updateDoc(adminRef, {
+                [`sectionAdmins.${newAdminUid}`]: selectedPermissions
+            });
+            alert('تمت إضافة المسؤول بنجاح.');
+            addAdminForm.reset();
+        } catch (err) {
+            console.error('Error adding section admin:', err);
+            alert('حدث خطأ أثناء إضافة المسؤول.');
+        }
+    });
+
+    adminModal.addEventListener('click', async (e) => {
+        const removeBtn = e.target.closest('.remove-admin-btn');
+        if (removeBtn && userRoles.isSuperAdmin) {
+            const adminIdToRemove = removeBtn.dataset.id;
+            if (confirm(`هل أنت متأكد من إزالة صلاحيات المسؤول ${adminIdToRemove}؟`)) {
+                const adminRef = doc(db, `/artifacts/${appId}/public/data/config/admin_doc`);
+                try {
+                    await updateDoc(adminRef, {
+                        [`sectionAdmins.${adminIdToRemove}`]: deleteField()
+                    });
+                    alert('تمت إزالة المسؤول بنجاح.');
+                } catch (err) {
+                    console.error('Error removing admin:', err);
+                    alert('حدث خطأ أثناء إزالة المسؤول.');
+                }
+            }
+        }
+        
+        if (e.target === adminModal || e.target.closest('#admin-modal-close')) {
+            adminModal.classList.remove('show');
+        }
+    });
+
+
+    // مصادقة مجهولة
+    (async function initAuth() {
+      try { await signInAnonymously(auth); }
+      catch (error) {
+        console.error('Authentication failed:', error);
+        const userInfoEl = document.getElementById('user-info');
+        if (userInfoEl) userInfoEl.textContent = 'فشل المصادقة. يرجى التحقق من إعدادات Firebase.';
+        if (loadingSpinner) loadingSpinner.style.display = 'none';
+      }
+    })();
+    
+    // Name Prompt Logic
+    namePromptForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const userName = userNameInput.value.trim();
+        if (userName) {
+            localStorage.setItem('userName', userName);
+            namePromptModal.classList.remove('show');
+            updateUserInfoDisplay();
+        }
+    });
+    
+    document.getElementById('user-info').addEventListener('click', (e) => {
+        if (e.target.id === 'edit-name-btn') {
+            const currentName = localStorage.getItem('userName') || '';
+            userNameInput.value = currentName;
+            namePromptModal.classList.add('show');
+        }
+    });
+
+
+    /* ======= تسجيل دخول المدير (كلمة مرور ثابتة - قابلة للتغيير) ======= */
+    loginAdminBtn.addEventListener('click', () => loginAdminModal.classList.add('show'));
+    logoutAdminBtn.addEventListener('click', () => {
+        sessionStorage.removeItem('isSuperAdmin');
+        alert('✅ تم تسجيل الخروج بنجاح.');
+        window.location.reload();
+    });
+    cancelAdminLogin.addEventListener('click', () => {
+      loginAdminModal.classList.remove('show');
+      adminLoginForm.reset();
+      adminLoginError.classList.add('hidden');
+    });
+    adminLoginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const entered = document.getElementById('admin-password').value.trim();
+      const correct = "rashedon2025"; // عدّلها كما تشاء
+      if (entered === correct) {
+        sessionStorage.setItem('isSuperAdmin', 'true');
+        loginAdminModal.classList.remove('show');
+        alert('✅ تم تسجيل الدخول كمدير بنجاح');
+        window.location.reload();
+      } else {
+        adminLoginError.classList.remove('hidden');
+      }
+    });
+    
+    // ================= NEW: Requests Logic =================
+    function setupRequestsListener() {
+        if (!userRoles.isSuperAdmin) return;
+        const q = query(collection(db, `/artifacts/${appId}/public/data/permission_requests`), where('status', '==', 'pending'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (snapshot.size > 0) {
+                requestsBadge.textContent = snapshot.size;
+                requestsBadge.classList.remove('hidden');
+            } else {
+                requestsBadge.classList.add('hidden');
+            }
+            renderRequestsModal(snapshot.docs);
+        });
+        mainUnsubscribes.push(unsubscribe);
+    }
+
+    function renderRequestsModal(docs) {
+        if (docs.length === 0) {
+            requestsList.innerHTML = `<p class="text-gray-500 text-center p-4">لا توجد طلبات معلقة حاليًا.</p>`;
+            return;
+        }
+        requestsList.innerHTML = docs.map(doc => {
+            const request = doc.data();
+            return `
+                <div class="p-3 bg-gray-50 rounded border">
+                    <p><span class="font-bold">المستخدم:</span> <span class="font-semibold">${request.userName}</span> (<span class="font-mono text-xs">${request.userId}</span>)</p>
+                    <p><span class="font-bold">يطلب التحكم في قسم:</span> ${request.sectionTitle}</p>
+                    <div class="mt-2 text-left">
+                        <button class="deny-request-btn bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded" data-id="${doc.id}">رفض</button>
+                        <button class="approve-request-btn bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded" data-id="${doc.id}" data-user-id="${request.userId}" data-section-id="${request.sectionId}">موافقة</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    requestsBtn.addEventListener('click', () => requestsModal.classList.add('show'));
+    requestsModal.addEventListener('click', (e) => {
+        if (e.target.id === 'requests-modal-close' || e.target === requestsModal) {
+            requestsModal.classList.remove('show');
+        }
+    });
+    
+    requestsList.addEventListener('click', async (e) => {
+        if (!userRoles.isSuperAdmin) return;
+        const approveBtn = e.target.closest('.approve-request-btn');
+        const denyBtn = e.target.closest('.deny-request-btn');
+
+        if (approveBtn) {
+            const { id, userId, sectionId } = approveBtn.dataset;
+            const adminRef = doc(db, `/artifacts/${appId}/public/data/config/admin_doc`);
+            const requestRef = doc(db, `/artifacts/${appId}/public/data/permission_requests`, id);
+            try {
+                const adminDoc = await getDoc(adminRef);
+                const currentAdmins = adminDoc.data().sectionAdmins || {};
+                const userPermissions = currentAdmins[userId] || [];
+                if (!userPermissions.includes(sectionId)) {
+                    userPermissions.push(sectionId);
+                }
+                await updateDoc(adminRef, { [`sectionAdmins.${userId}`]: userPermissions });
+                await updateDoc(requestRef, { status: 'approved' });
+                alert('تمت الموافقة على الطلب ومنح الصلاحية.');
+            } catch (err) {
+                console.error("Error approving request:", err);
+                alert('فشل في الموافقة على الطلب.');
+            }
+        }
+
+        if (denyBtn) {
+            const { id } = denyBtn.dataset;
+            const requestRef = doc(db, `/artifacts/${appId}/public/data/permission_requests`, id);
+            try {
+                await updateDoc(requestRef, { status: 'denied' });
+                alert('تم رفض الطلب.');
+            } catch (err) {
+                console.error("Error denying request:", err);
+                alert('فشل في رفض الطلب.');
+            }
+        }
+    });
+
+    // ================= NEW: Chat Logic =================
+    
+    chatFab.addEventListener('click', () => {
+        if (userRoles.isSuperAdmin) {
+            adminChatListModal.classList.add('show');
+        } else {
+            openChatForUser(currentUser.uid);
+        }
+    });
+
+    function openChatForUser(userId) {
+        if (currentChatUnsubscribe) currentChatUnsubscribe();
+        currentChatUserId = userId;
+        
+        chatWithTitle.textContent = userRoles.isSuperAdmin ? `الدردشة مع المستخدم...` : 'الدردشة مع المدير';
+        chatModal.classList.add('show');
+
+        let isInitialChatLoad = true;
+        const messagesRef = collection(db, `/artifacts/${appId}/public/data/chats/${userId}/messages`);
+        const q = query(messagesRef, orderBy('timestamp', 'asc'));
+        currentChatUnsubscribe = onSnapshot(q, (snapshot) => {
+            const docs = snapshot.docs;
+            if (!isInitialChatLoad && docs.length > 0) {
+                const lastMessage = docs[docs.length - 1].data();
+                const isMyMessage = userRoles.isSuperAdmin ? lastMessage.senderId === 'admin' : lastMessage.senderId === currentUser.uid;
+                
+                if (!isMyMessage) {
+                    playNotificationSound();
+                }
+            }
+            
+            renderChatMessages(docs);
+            isInitialChatLoad = false;
+        });
+    }
+    
+    function renderChatMessages(docs) {
+        chatMessages.innerHTML = '';
+        docs.forEach(doc => {
+            const msg = doc.data();
+            const isAdminMsg = msg.senderId === 'admin';
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('flex', isAdminMsg ? 'justify-start' : 'justify-end');
+
+            if (msg.type === 'audio') {
+                messageDiv.innerHTML = `
+                    <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${isAdminMsg ? 'bg-gray-200' : 'bg-green-600'}">
+                        <audio controls src="${msg.url}" class="w-full"></audio>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${isAdminMsg ? 'bg-gray-200 text-gray-800 rounded-br-none' : 'bg-green-600 text-white rounded-bl-none'}">
+                        <p class="text-sm">${msg.text}</p>
+                    </div>
+                `;
+            }
+            chatMessages.appendChild(messageDiv);
+        });
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = chatInput.value.trim();
+        if (!text) return;
+        
+        const recipientId = userRoles.isSuperAdmin ? currentChatUserId : currentUser.uid;
+        
+        try {
+            const senderId = userRoles.isSuperAdmin ? 'admin' : currentUser.uid;
+            const userName = localStorage.getItem('userName') || 'مجهول';
+
+            await addDoc(collection(db, `/artifacts/${appId}/public/data/chats/${recipientId}/messages`), {
+                text: text,
+                senderId: senderId,
+                type: 'text',
+                timestamp: serverTimestamp()
+            });
+            await setDoc(doc(db, `/artifacts/${appId}/public/data/chats`, recipientId), { 
+                lastActivity: serverTimestamp(),
+                lastMessageSender: senderId,
+                lastMessageText: text,
+                userName: userName,
+            }, { merge: true });
+            chatInput.value = '';
+        } catch(err) {
+            console.error("Error sending message:", err);
+        }
+    });
+    
+    function setupAdminChatListListener() {
+        if (!userRoles.isSuperAdmin) return;
+        
+        let isInitialChatList = true;
+        const q = query(collection(db, `/artifacts/${appId}/public/data/chats`), orderBy('lastActivity', 'desc'));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (isInitialChatList) {
+                isInitialChatList = false;
+                renderAdminChatList(snapshot.docs);
+                return;
+            }
+
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === "modified" || change.type === "added") {
+                    const chatData = change.doc.data();
+                    if (chatData.lastMessageSender && chatData.lastMessageSender !== 'admin') {
+                        if (!chatModal.classList.contains('show') || currentChatUserId !== change.doc.id) {
+                            playNotificationSound();
+                        }
+                    }
+                }
+            });
+
+            renderAdminChatList(snapshot.docs);
+        });
+        mainUnsubscribes.push(unsubscribe);
+    }
+    
+    async function deleteChatForUser(userId) {
+        if (!confirm(`هل أنت متأكد من حذف محادثة المستخدم ${userId}؟ لا يمكن التراجع عن هذا الإجراء.`)) {
+            return;
+        }
+
+        try {
+            // 1. Delete all messages in the subcollection
+            const messagesRef = collection(db, `/artifacts/${appId}/public/data/chats/${userId}/messages`);
+            const messagesSnapshot = await getDocs(messagesRef);
+            const batch = writeBatch(db);
+            messagesSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            await batch.commit();
+
+            // 2. Delete the main chat document
+            const chatDocRef = doc(db, `/artifacts/${appId}/public/data/chats`, userId);
+            await deleteDoc(chatDocRef);
+
+            alert('تم حذف المحادثة بنجاح.');
+        } catch (err) {
+            console.error('Error deleting chat:', err);
+            alert('حدث خطأ أثناء حذف المحادثة.');
+        }
+    }
+
+    
+    function renderAdminChatList(docs) {
+        if (docs.length === 0) {
+            adminChatList.innerHTML = `<p class="text-gray-500 text-center p-4">لا توجد محادثات نشطة.</p>`;
+            return;
+        }
+        adminChatList.innerHTML = docs.map(doc => {
+            const chatData = doc.data();
+            return `
+            <div class="flex items-center justify-between p-3 bg-gray-100 hover:bg-gray-200 rounded">
+                <button class="open-chat-btn w-full text-right" data-user-id="${doc.id}">
+                    محادثة مع: <span class="font-bold">${chatData.userName || 'مستخدم'}</span>
+                    <span class="font-mono text-xs block text-gray-500">${doc.id}</span>
+                </button>
+                <button class="delete-chat-btn text-red-500 hover:text-red-700 p-2 ml-2 flex-shrink-0" data-user-id="${doc.id}" title="حذف المحادثة">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd"></path></svg>
+                </button>
+            </div>
+            `;
+        }).join('');
+    }
+
+    adminChatList.addEventListener('click', (e) => {
+        const chatBtn = e.target.closest('.open-chat-btn');
+        if (chatBtn) {
+            const userId = chatBtn.dataset.userId;
+            adminChatListModal.classList.remove('show');
+            openChatForUser(userId);
+        }
+        const deleteBtn = e.target.closest('.delete-chat-btn');
+        if (deleteBtn) {
+            const userId = deleteBtn.dataset.userId;
+            deleteChatForUser(userId);
+        }
+    });
+    
+    chatModal.querySelector('#chat-modal-close').addEventListener('click', () => {
+        chatModal.classList.remove('show');
+        if (currentChatUnsubscribe) currentChatUnsubscribe();
+        currentChatUserId = null;
+    });
+    
+    adminChatListModal.querySelector('#admin-chat-list-modal-close').addEventListener('click', () => {
+        adminChatListModal.classList.remove('show');
+    });
+    
+    // Emoji Panel Logic
+    const emojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '❤️', '👋', '🎉', '😢', '🙏', '🔥', '💯', '✅', '❌', '❓'];
+    emojis.forEach(emoji => {
+        const span = document.createElement('span');
+        span.textContent = emoji;
+        span.className = 'cursor-pointer p-1 text-2xl hover:bg-gray-200 rounded';
+        emojiPanel.appendChild(span);
+    });
+
+    emojiBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        emojiPanel.classList.toggle('hidden');
+    });
+
+    emojiPanel.addEventListener('click', (e) => {
+        if (e.target.tagName === 'SPAN') {
+            chatInput.value += e.target.textContent;
+            emojiPanel.classList.add('hidden');
+            chatInput.focus();
+        }
+    });
+    
+    document.addEventListener('click', (e) => {
+        if (chatModal.classList.contains('show') && !emojiBtn.contains(e.target) && !emojiPanel.contains(e.target)) {
+            emojiPanel.classList.add('hidden');
+        }
+    });
+    
+    // Audio Recording Logic
+    async function startRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            isRecording = true;
+            audioChunks = [];
+            recordAudioBtn.classList.add('text-red-500', 'recording');
+
+            mediaRecorder.addEventListener("dataavailable", event => {
+                audioChunks.push(event.data);
+            });
+
+            mediaRecorder.addEventListener("stop", async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const audioFile = new File([audioBlob], `rec_${Date.now()}.webm`, { type: 'audio/webm' });
+                const recipientId = userRoles.isSuperAdmin ? currentChatUserId : currentUser.uid;
+                const storageRef = ref(storage, `uploads/chat_audio/${recipientId}/${audioFile.name}`);
+                
+                try {
+                    const snapshot = await uploadBytes(storageRef, audioFile);
+                    const downloadURL = await getDownloadURL(snapshot.ref);
+                    sendMediaMessage(downloadURL, 'audio');
+                } catch(err) {
+                    console.error("Error uploading audio:", err);
+                    alert("فشل رفع الرسالة الصوتية.");
+                }
+            });
+        } catch (err) {
+            console.error("Error accessing microphone:", err);
+            alert("لا يمكن الوصول إلى الميكروفون. يرجى التأكد من منح الإذن اللازم.");
+        }
+    }
+
+    function stopRecording() {
+        if (mediaRecorder) {
+            mediaRecorder.stop();
+            isRecording = false;
+            recordAudioBtn.classList.remove('text-red-500', 'recording');
+            // Get the stream and stop all tracks to turn off the microphone light
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+    }
+
+    async function sendMediaMessage(url, type) {
+        const recipientId = userRoles.isSuperAdmin ? currentChatUserId : currentUser.uid;
+        try {
+            const senderId = userRoles.isSuperAdmin ? 'admin' : currentUser.uid;
+            const userName = localStorage.getItem('userName') || 'مجهول';
+
+            await addDoc(collection(db, `/artifacts/${appId}/public/data/chats/${recipientId}/messages`), {
+                url: url,
+                senderId: senderId,
+                type: type,
+                timestamp: serverTimestamp()
+            });
+            await setDoc(doc(db, `/artifacts/${appId}/public/data/chats`, recipientId), { 
+                lastActivity: serverTimestamp(),
+                lastMessageSender: senderId,
+                lastMessageText: 'رسالة صوتية',
+                userName: userName,
+            }, { merge: true });
+        } catch(err) {
+            console.error("Error sending media message:", err);
+        }
+    }
+
+    recordAudioBtn.addEventListener('click', () => {
+        if (!isRecording) {
+            startRecording();
+        } else {
+            stopRecording();
+        }
+    });
+
+
+
+    /* ===================== الطباعة: PDF ===================== */
+
+    function createReportRowHTML(title, url) {
+      const tr = document.createElement('tr');
+      const tdTitle = document.createElement('td');
+      const tdQR = document.createElement('td');
+      const tdNotes = document.createElement('td');
+
+      tdTitle.textContent = title || '';
+      tdTitle.style.fontWeight = '600'; tdTitle.style.color = '#1f2937';
+
+      const qrBox = document.createElement('div');
+      qrBox.className = 'qr-box';
+      tdQR.style.textAlign = 'center';
+      tdQR.appendChild(qrBox);
+      new QRCode(qrBox, { text: url || '', width: 80, height: 80, correctLevel: QRCode.CorrectLevel.M });
+
+      tdNotes.innerHTML = '&nbsp;';
+
+      tr.appendChild(tdTitle); tr.appendChild(tdQR); tr.appendChild(tdNotes);
+      return tr;
+    }
+
+    function buildHeader(container) {
+      const header = document.createElement('div');
+      header.className = 'print-header';
+
+      const logoRight = document.createElement('div'); logoRight.className = 'header-logo';
+      logoRight.innerHTML = `<svg viewBox="0 0 64 36" width="110" height="60"><rect x="0" y="0" width="64" height="36" fill="#065f46" rx="6"></rect><circle cx="20" cy="18" r="6" fill="#fff"></circle><rect x="30" y="14" width="18" height="8" fill="#fff" rx="2"></rect></svg>`;
+
+      const center = document.createElement('div'); center.className = 'header-center'; center.style.textAlign = 'center';
+      center.innerHTML = `
+        <p style="font-weight:700;">المملكة العربية السعودية</p>
+        <p>وزارة التعليم</p>
+        <p>الإدارة العامة للتعليم بمنطقة عسير</p>
+        <p style="font-weight:700;">ابتدائية ومتوسطة الراشدون بالمربع</p>`;
+
+      const logoLeft = document.createElement('div'); logoLeft.className = 'header-logo';
+      logoLeft.innerHTML = `<svg viewBox="0 0 64 36" width="110" height="60"><rect x="0" y="0" width="64" height="36" fill="#10b981" rx="6"></rect><path d="M10 28 L22 8 L34 28 Z" fill="#fff"></path><circle cx="46" cy="18" r="6" fill="#fff"></circle></svg>`;
+
+      header.appendChild(logoRight); header.appendChild(center); header.appendChild(logoLeft);
+      container.appendChild(header);
+
+      const hr = document.createElement('hr');
+      hr.style.margin = '6px 0 10px'; hr.style.borderColor = '#d1d5db';
+      container.appendChild(hr);
+    }
+
+    function buildSectionTable(container, sectionTitle, reports) {
+      const title = document.createElement('div');
+      title.className = 'section-title-print';
+      title.textContent = sectionTitle || 'قسم';
+      container.appendChild(title);
+
+      const table = document.createElement('table');
+      table.className = 'table';
+      const thead = document.createElement('thead');
+      thead.innerHTML = `<tr><th>اسم التقرير</th><th>رمز QR</th><th>ملاحظات</th></tr>`;
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      (reports || []).forEach(r => tbody.appendChild(createReportRowHTML(r.title, r.url)));
+      if (!reports || reports.length === 0) {
+        const empty = document.createElement('tr');
+        empty.innerHTML = `<td colspan="3" style="text-align:center; color:#6b7280">لا توجد تقارير في هذا القسم.</td>`;
+        tbody.appendChild(empty);
+      }
+      table.appendChild(tbody);
+      container.appendChild(table);
+    }
+
+    function buildFooterImageDataUrl(isHealthGuide, pxWidth = 2480, pxHeight = 90) {
+      const canvas = document.createElement('canvas');
+      canvas.width = pxWidth; canvas.height = pxHeight;
+      const ctx = canvas.getContext('2d');
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = "bold 28px 'Cairo', Tahoma, Arial";
+      ctx.fillStyle = "#111827";
+      ctx.textBaseline = 'middle';
+
+      const rightText = isHealthGuide
+        ? "إعداد: الموجه الصحي علي إبراهيم عسيري"
+        : "إعداد: علي إبراهيم عسيري";
+      const leftText = "مدير المدرسة: أحمد سالم الشهري";
+
+      ctx.textAlign = 'right';
+      ctx.fillText(rightText, canvas.width - 40, canvas.height / 2);
+
+      ctx.textAlign = 'left';
+      ctx.fillText(leftText, 40, canvas.height / 2);
+
+      return canvas.toDataURL('image/png');
+    }
+
+    async function fetchSectionReports(collectionName) {
+      const collectionPath = `/artifacts/${appId}/public/data/${collectionName}`;
+      const qLinks = query(collection(db, collectionPath));
+      const snap = await getDocs(qLinks);
+      const rows = [];
+      snap.forEach(d => {
+        const data = d.data();
+        rows.push({ title: data.title || '', url: data.url || '', createdAt: data.createdAt });
+      });
+      rows.sort((a, b) => ((a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0)));
+      return rows;
+    }
+
+    async function generateSectionsPDF({ mode = 'all', sectionTitle = '', collectionName = '' } = {}) {
+      try {
+        printRoot.innerHTML = '';
+        buildHeader(printRoot);
+
+        if (mode === 'single') {
+          const reports = await fetchSectionReports(collectionName);
+          buildSectionTable(printRoot, sectionTitle, reports);
+        } else {
+          let visible = sectionsData;
+          if (!userRoles.isSuperAdmin) {
+            visible = sectionsData.filter(doc => {
+              const s = doc.data();
+              return !s.isPrivate || userRoles.managedSections.includes(s.collectionName);
+            });
+          }
+          for (const secDoc of visible) {
+            const sec = secDoc.data();
+            const reports = await fetchSectionReports(sec.collectionName);
+            buildSectionTable(printRoot, sec.title, reports);
+            const sep = document.createElement('div');
+            sep.style.height = '12px';
+            printRoot.appendChild(sep);
+          }
+        }
+
+        await new Promise(r => setTimeout(r, 120));
+        const canvas = await html2canvas(printRoot, { scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
+
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+        const pdfW = pdf.internal.pageSize.getWidth();
+        const pdfH = pdf.internal.pageSize.getHeight();
+
+        const imgW = canvas.width;
+        const imgH = canvas.height;
+        const ratio = pdfW / imgW;
+        const totalHeightPt = imgH * ratio;
+        const footerImg = buildFooterImageDataUrl(mode === 'single' && sectionTitle.trim() === 'الموجه الصحي');
+        const footerHeightPt = 38;
+
+        if (totalHeightPt + footerHeightPt <= pdfH) {
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfW, imgH * ratio);
+          pdf.addImage(footerImg, 'PNG', 0, pdfH - footerHeightPt, pdfW, footerHeightPt);
+        } else {
+          let y = 0;
+          const pageHeightPx = (pdfH - footerHeightPt) / ratio;
+          let first = true;
+
+          while (y < imgH) {
+            const sliceHeight = Math.min(pageHeightPx, imgH - y);
+            const pageCanvas = document.createElement('canvas');
+            pageCanvas.width = imgW;
+            pageCanvas.height = sliceHeight;
+            const ctx = pageCanvas.getContext('2d');
+            ctx.drawImage(canvas, 0, y, imgW, sliceHeight, 0, 0, imgW, sliceHeight);
+            const pageData = pageCanvas.toDataURL('image/png');
+
+            if (first) {
+              pdf.addImage(pageData, 'PNG', 0, 0, pdfW, sliceHeight * ratio);
+              first = false;
+            } else {
+              pdf.addPage();
+              pdf.addImage(pageData, 'PNG', 0, 0, pdfW, sliceHeight * ratio);
+            }
+            const isHealthGuide = (mode === 'single' && sectionTitle.trim() === 'الموجه الصحي');
+            const footerImgPerPage = buildFooterImageDataUrl(isHealthGuide);
+            pdf.addImage(footerImgPerPage, 'PNG', 0, pdfH - footerHeightPt, pdfW, footerHeightPt);
+
+            y += sliceHeight;
+          }
+        }
+
+        const filename = mode === 'single'
+          ? `تقارير_${sectionTitle || 'قسم'}.pdf`
+          : `تقارير_جميع_الأقسام.pdf`;
+        pdf.save(filename);
+
+      } catch (err) {
+        console.error('Print error:', err);
+        alert('حدث خطأ أثناء تجهيز ملف الطباعة.');
+      }
+    }
+
+    document.getElementById('print-all-btn').addEventListener('click', () => generateSectionsPDF({ mode: 'all' }));
+
+    /* ==================== عداد مساحة التخزين ==================== */
+
+    const STORAGE_ROOT = 'uploads';
+    const PLAN_LIMIT_BYTES = 1 * 1024 * 1024 * 1024; // 1GB
+
+    async function accumulateFolderBytes(folderRef) {
+      let total = 0;
+      const listing = await listAll(folderRef);
+      for (const itemRef of listing.items) {
+        try {
+          const meta = await getMetadata(itemRef);
+          total += meta.size || 0;
+        } catch (e) {
+          console.warn('metadata failed for', itemRef.fullPath, e);
+        }
+      }
+      for (const prefixRef of listing.prefixes) {
+        total += await accumulateFolderBytes(prefixRef);
+      }
+      return total;
+    }
+
+    function formatBytes(bytes) {
+      const kb = 1024, mb = kb * 1024, gb = mb * 1024;
+      if (bytes >= gb) return (bytes / gb).toFixed(2) + ' غيغابايت';
+      if (bytes >= mb) return (bytes / mb).toFixed(2) + ' ميغابايت';
+      if (bytes >= kb) return (bytes / kb).toFixed(0) + ' كيلوبايت';
+      return bytes + ' بايت';
+    }
+
+    function colorForPercent(p) {
+      if (p < 50) return 'linear-gradient(90deg,#10b981,#34d399)';
+      if (p < 80) return 'linear-gradient(90deg,#f59e0b,#fbbf24)';
+      return 'linear-gradient(90deg,#ef4444,#f87171)';
+    }
+
+    function updateStorageUsageUI(usedBytes) {
+      const usedText = formatBytes(usedBytes);
+      const limitText = formatBytes(PLAN_LIMIT_BYTES);
+      const percent = Math.min(100, Math.round((usedBytes / PLAN_LIMIT_BYTES) * 100));
+
+      usageTextEl.textContent = `${usedText} من ${limitText} (${percent}٪)`;
+      usageFillEl.style.width = percent + '%';
+      usageFillEl.style.background = colorForPercent(percent);
+    }
+
+    async function recalculateTotalStorage() {
+        recalculateStorageBtn.disabled = true;
+        recalculateStorageBtn.textContent = 'جارٍ الحساب...';
+        try {
+            const rootRef = ref(storage, 'uploads/');
+            const total = await accumulateFolderBytes(rootRef);
+            const storageInfoRef = doc(db, `/artifacts/${appId}/public/data/config/storage_info`);
+            await setDoc(storageInfoRef, { totalSize: total });
+            alert('تمت إعادة حساب المساحة بنجاح.');
+        } catch(e) {
+            console.error("Storage recalculation error:", e);
+            alert("فشلت عملية إعادة الحساب.");
+        } finally {
+            recalculateStorageBtn.disabled = false;
+            recalculateStorageBtn.textContent = 'إعادة حساب المساحة';
+        }
+    }
+    recalculateStorageBtn.addEventListener('click', recalculateTotalStorage);
+    
+    function setupStorageUsageListener() {
+        if (!userRoles.isSuperAdmin) {
+            storageUsageEl.style.display = 'none';
+            return;
+        };
+        storageUsageEl.style.display = 'block';
+        recalculateStorageBtn.classList.remove('hidden');
+
+        const storageInfoRef = doc(db, `/artifacts/${appId}/public/data/config/storage_info`);
+        
+        onSnapshot(storageInfoRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const usedBytes = docSnap.data().totalSize || 0;
+                updateStorageUsageUI(usedBytes);
+            } else {
+                updateStorageUsageUI(0);
+            }
+        }, (error) => {
+            console.error("Error listening to storage info:", error);
+            usageTextEl.textContent = 'خطأ في قراءة البيانات';
+        });
+    }
+
+  </script>
+</body>
+</html>
+
