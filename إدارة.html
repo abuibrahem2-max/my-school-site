@@ -101,6 +101,10 @@
     .header-center p { margin: 4px 0; line-height: 1.7; } /* زدنا ارتفاع السطر */
 
     .table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    /* ضمان تكرار رأس الجدول في الطباعة */
+    .table thead { 
+        display: table-header-group; 
+    }
     .table th, .table td { border: 1px solid #e5e7eb; padding: 8px; vertical-align: middle; }
     .table thead th { background: #065f46; color: #fff; text-align: center; font-weight: 700; }
     .qr-box { width: 80px; height: 80px; display: inline-flex; align-items: center; justify-content: center; }
@@ -289,7 +293,7 @@
   <!-- Modal: إضافة قسم -->
   <div id="section-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-20">
     <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-      <h2 class="text-xl font-bold mb-4">إضافة قسم جديد</h2>
+      <h2 id="section-modal-title" class="text-xl font-bold mb-4">إضافة قسم جديد</h2>
       <form id="section-form">
         <div class="mb-4">
           <label class="block text-gray-700 text-sm font-bold mb-2">عنوان القسم:</label>
@@ -303,7 +307,7 @@
         </div>
         <div class="flex items-center justify-end space-x-4 space-x-reverse">
           <button type="button" id="section-modal-cancel" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">إلغاء</button>
-          <button type="submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">إضافة القسم</button>
+          <button type="submit" id="section-modal-submit" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">إضافة القسم</button>
         </div>
       </form>
     </div>
@@ -627,6 +631,12 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
             <span>طباعة</span>
         </button>`;
+        
+      const editSectionBtn = userRoles.isSuperAdmin
+        ? `<button class="edit-section-btn p-1 text-blue-500 hover:text-blue-700" data-id="${sectionDoc.id}" data-title="${section.title}" data-private="${section.isPrivate}">
+                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
+            </button>`
+        : '';
 
       return `
         <div data-id="${sectionDoc.id}" class="section-card bg-white p-6 rounded-xl shadow-lg flex flex-col">
@@ -636,6 +646,7 @@
                     <h2 class="text-xl font-bold text-gray-700 flex items-center min-w-0">
                         ${privateIcon}
                         <span class="section-title-bg truncate" title="${section.title}">${section.title}</span>
+                        ${editSectionBtn}
                     </h2>
                 </div>
                 <div class="flex items-center space-x-1 space-x-reverse flex-shrink-0">
@@ -912,6 +923,7 @@
       const deleteSectionBtn = e.target.closest('.delete-section-btn');
       const printSectionBtn = e.target.closest('.print-section-btn');
       const requestPermissionBtn = e.target.closest('.request-permission-btn');
+      const editSectionBtn = e.target.closest('.edit-section-btn');
 
 
       if (addBtn) {
@@ -928,6 +940,20 @@
         linkUrlInput.required = false;
 
       }
+      if (editSectionBtn && userRoles.isSuperAdmin) {
+            const { id, title, private: isPrivate } = editSectionBtn.dataset;
+            
+            // Set modal for editing
+            document.getElementById('section-modal-title').textContent = 'تعديل القسم';
+            document.getElementById('section-modal-submit').textContent = 'حفظ التعديلات';
+            sectionTitleInput.value = title;
+            sectionPrivateCheckbox.checked = (isPrivate === 'true');
+            
+            // Store the ID for the submit handler
+            sectionModal.dataset.editingId = id; 
+            
+            sectionModal.classList.add('show');
+        }
       if (editBtn) {
         const sectionCollection = editBtn.closest('.link-list').id;
         if (!userRoles.isSuperAdmin && !userRoles.managedSections.includes(sectionCollection)) return;
@@ -1122,21 +1148,63 @@
       e.preventDefault();
       const title = sectionTitleInput.value.trim();
       if (!title || !userRoles.isSuperAdmin) return;
-      const newIcon = iconPool[sectionsData.length % iconPool.length] || defaultIcon;
-      const collectionName = title.toLowerCase().replace(/\s+/g, '_').replace(/[^\u0600-\u06FFa-z0-9_]/g, '') + '_' + Date.now();
-      try {
-        await addDoc(collection(db, `/artifacts/${appId}/public/data/sections_config`), {
-          title, icon: newIcon, collectionName, createdAt: serverTimestamp(),
-          order: sectionsData.length, isPrivate: sectionPrivateCheckbox.checked
-        });
-        sectionModal.classList.remove('show'); sectionForm.reset();
-      } catch (err) { console.error('Error adding section:', err); alert('فشل في إضافة القسم.'); }
+      
+      const sectionId = sectionModal.dataset.editingId;
+      
+      if (sectionId) {
+          // EDIT MODE
+          const docRef = doc(db, `/artifacts/${appId}/public/data/sections_config`, sectionId);
+          try {
+              await updateDoc(docRef, {
+                  title: title,
+                  isPrivate: sectionPrivateCheckbox.checked
+              });
+              sectionModal.classList.remove('show');
+          } catch(err) {
+              console.error('Error updating section:', err);
+              alert('فشل في تحديث القسم.');
+          }
+      } else {
+          // ADD MODE (existing logic)
+          const newIcon = iconPool[sectionsData.length % iconPool.length] || defaultIcon;
+          const collectionName = title.toLowerCase().replace(/\s+/g, '_').replace(/[^\u0600-\u06FFa-z0-9_]/g, '') + '_' + Date.now();
+          try {
+            await addDoc(collection(db, `/artifacts/${appId}/public/data/sections_config`), {
+              title, icon: newIcon, collectionName, createdAt: serverTimestamp(),
+              order: sectionsData.length, isPrivate: sectionPrivateCheckbox.checked
+            });
+            sectionModal.classList.remove('show');
+          } catch (err) { console.error('Error adding section:', err); alert('فشل في إضافة القسم.'); }
+      }
+      
+      // Reset modal after submit
+      sectionModal.dataset.editingId = '';
+      sectionForm.reset();
+      document.getElementById('section-modal-title').textContent = 'إضافة قسم جديد';
+      document.getElementById('section-modal-submit').textContent = 'إضافة القسم';
     });
 
     // فتح/إغلاق المودالات
     linkModal.addEventListener('click', (e) => { if (e.target === linkModal || e.target.closest('#modal-cancel')) { linkModal.classList.remove('show'); linkForm.reset(); } });
-    addSectionBtn.addEventListener('click', () => sectionModal.classList.add('show'));
-    sectionModal.addEventListener('click', (e) => { if (e.target === sectionModal || e.target.closest('#section-modal-cancel')) sectionModal.classList.remove('show'); });
+    addSectionBtn.addEventListener('click', () => {
+        // Reset state just in case
+        sectionModal.dataset.editingId = '';
+        sectionForm.reset();
+        document.getElementById('section-modal-title').textContent = 'إضافة قسم جديد';
+        document.getElementById('section-modal-submit').textContent = 'إضافة القسم';
+        
+        sectionModal.classList.add('show');
+    });
+    sectionModal.addEventListener('click', (e) => { 
+        if (e.target === sectionModal || e.target.closest('#section-modal-cancel')) {
+            sectionModal.classList.remove('show');
+            // Reset state
+            sectionModal.dataset.editingId = '';
+            sectionForm.reset();
+            document.getElementById('section-modal-title').textContent = 'إضافة قسم جديد';
+            document.getElementById('section-modal-submit').textContent = 'إضافة القسم';
+        } 
+    });
 
     adminPanelBtn.addEventListener('click', async () => {
       const adminRef = doc(db, `/artifacts/${appId}/public/data/config/admin_doc`);
@@ -1766,57 +1834,38 @@
           }
         }
 
-        await new Promise(r => setTimeout(r, 120));
-        const canvas = await html2canvas(printRoot, { scale: 2 });
-        const imgData = canvas.toDataURL('image/png');
+        await new Promise(r => setTimeout(r, 120)); // Keep for QR code rendering
 
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
         const pdfW = pdf.internal.pageSize.getWidth();
         const pdfH = pdf.internal.pageSize.getHeight();
-
-        const imgW = canvas.width;
-        const imgH = canvas.height;
-        const ratio = pdfW / imgW;
-        const totalHeightPt = imgH * ratio;
+        
+        // --- NEW LOGIC ---
         const footerImg = buildFooterImageDataUrl(mode === 'single' && sectionTitle.trim() === 'الموجه الصحي');
         const footerHeightPt = 38;
 
-        if (totalHeightPt + footerHeightPt <= pdfH) {
-          pdf.addImage(imgData, 'PNG', 0, 0, pdfW, imgH * ratio);
-          pdf.addImage(footerImg, 'PNG', 0, pdfH - footerHeightPt, pdfW, footerHeightPt);
-        } else {
-          let y = 0;
-          const pageHeightPx = (pdfH - footerHeightPt) / ratio;
-          let first = true;
-
-          while (y < imgH) {
-            const sliceHeight = Math.min(pageHeightPx, imgH - y);
-            const pageCanvas = document.createElement('canvas');
-            pageCanvas.width = imgW;
-            pageCanvas.height = sliceHeight;
-            const ctx = pageCanvas.getContext('2d');
-            ctx.drawImage(canvas, 0, y, imgW, sliceHeight, 0, 0, imgW, sliceHeight);
-            const pageData = pageCanvas.toDataURL('image/png');
-
-            if (first) {
-              pdf.addImage(pageData, 'PNG', 0, 0, pdfW, sliceHeight * ratio);
-              first = false;
-            } else {
-              pdf.addPage();
-              pdf.addImage(pageData, 'PNG', 0, 0, pdfW, sliceHeight * ratio);
+        await pdf.html(printRoot, {
+            x: 0,
+            y: 0,
+            width: pdfW,
+            windowWidth: 842, // Match the printable-offscreen width
+            margin: [0, 0, footerHeightPt, 0], // Leave space for footer
+            autoPaging: 'text', // Try to break pages intelligently
+            callback: function(doc) {
+                // Add footer to every page
+                const pageCount = doc.internal.getNumberOfPages();
+                for (let i = 1; i <= pageCount; i++) {
+                    doc.setPage(i);
+                    doc.addImage(footerImg, 'PNG', 0, pdfH - footerHeightPt, pdfW, footerHeightPt);
+                }
+                
+                const filename = mode === 'single'
+                  ? `تقارير_${sectionTitle || 'قسم'}.pdf`
+                  : `تقارير_جميع_الأقسام.pdf`;
+                doc.save(filename);
             }
-            const isHealthGuide = (mode === 'single' && sectionTitle.trim() === 'الموجه الصحي');
-            const footerImgPerPage = buildFooterImageDataUrl(isHealthGuide);
-            pdf.addImage(footerImgPerPage, 'PNG', 0, pdfH - footerHeightPt, pdfW, footerHeightPt);
-
-            y += sliceHeight;
-          }
-        }
-
-        const filename = mode === 'single'
-          ? `تقارير_${sectionTitle || 'قسم'}.pdf`
-          : `تقارير_جميع_الأقسام.pdf`;
-        pdf.save(filename);
+        });
+        // --- END NEW LOGIC ---
 
       } catch (err) {
         console.error('Print error:', err);
@@ -1917,5 +1966,6 @@
   </script>
 </body>
 </html>
+
 
 
