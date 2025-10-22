@@ -632,6 +632,13 @@
             <span>طباعة</span>
         </button>`;
         
+      const shareSectionBtn = `
+        <button class="share-section-btn text-green-600 hover:text-green-800 font-bold text-sm bg-green-50 px-2 py-1 rounded flex items-center space-x-1 space-x-reverse"
+                data-collection="${section.collectionName}" data-title="${section.title}">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.487 5.235 3.487 8.413.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 4.318 1.738 6.088l.249.448-1.152 4.224 4.273-1.124.416.249z"/></svg>
+            <span>مشاركة</span>
+        </button>`;
+        
       const editSectionBtn = userRoles.isSuperAdmin
         ? `<button class="edit-section-btn p-1 text-blue-500 hover:text-blue-700" data-id="${sectionDoc.id}" data-title="${section.title}" data-private="${section.isPrivate}">
                 <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
@@ -650,6 +657,7 @@
                     </h2>
                 </div>
                 <div class="flex items-center space-x-1 space-x-reverse flex-shrink-0">
+                    ${shareSectionBtn}
                     ${printThisSectionBtn}
                     ${deleteBtn}
                 </div>
@@ -924,6 +932,7 @@
       const printSectionBtn = e.target.closest('.print-section-btn');
       const requestPermissionBtn = e.target.closest('.request-permission-btn');
       const editSectionBtn = e.target.closest('.edit-section-btn');
+      const shareSectionBtn = e.target.closest('.share-section-btn');
 
 
       if (addBtn) {
@@ -1026,6 +1035,11 @@
         const collectionName = printSectionBtn.dataset.collection;
         generateSectionsPDF({ mode: 'single', sectionTitle, collectionName });
       }
+      if (shareSectionBtn) { 
+            const sectionTitle = shareSectionBtn.dataset.title;
+            const collectionName = shareSectionBtn.dataset.collection;
+            shareSection(sectionTitle, collectionName);
+        }
       if (requestPermissionBtn) {
             const { sectionId, sectionTitle } = requestPermissionBtn.dataset;
             try {
@@ -1807,6 +1821,28 @@
       rows.sort((a, b) => ((a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0)));
       return rows;
     }
+    
+    async function shareSection(sectionTitle, collectionName) {
+        try {
+            const reports = await fetchSectionReports(collectionName);
+            let shareText = `*${sectionTitle}*\n\n`;
+            
+            if (reports.length === 0) {
+                shareText += "لا توجد عناصر في هذا القسم حاليًا.";
+            } else {
+                reports.forEach(report => {
+                    shareText += `${report.title}:\n${report.url}\n\n`;
+                });
+            }
+            
+            const encodedText = encodeURIComponent(shareText);
+            const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
+            window.open(whatsappUrl, '_blank');
+        } catch (err) {
+            console.error("Error sharing section:", err);
+            alert("حدث خطأ أثناء تجهيز رسالة المشاركة.");
+        }
+    }
 
     async function generateSectionsPDF({ mode = 'all', sectionTitle = '', collectionName = '' } = {}) {
       try {
@@ -1835,37 +1871,57 @@
         }
 
         await new Promise(r => setTimeout(r, 120)); // Keep for QR code rendering
+        
+        const canvas = await html2canvas(printRoot, { scale: 2 });
+        const imgData = canvas.toDataURL('image/png');
 
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
         const pdfW = pdf.internal.pageSize.getWidth();
         const pdfH = pdf.internal.pageSize.getHeight();
-        
-        // --- NEW LOGIC ---
+
+        const imgW = canvas.width;
+        const imgH = canvas.height;
+        const ratio = pdfW / imgW;
+        const totalHeightPt = imgH * ratio;
         const footerImg = buildFooterImageDataUrl(mode === 'single' && sectionTitle.trim() === 'الموجه الصحي');
         const footerHeightPt = 38;
 
-        await pdf.html(printRoot, {
-            x: 0,
-            y: 0,
-            width: pdfW,
-            windowWidth: 842, // Match the printable-offscreen width
-            margin: [0, 0, footerHeightPt, 0], // Leave space for footer
-            autoPaging: 'text', // Try to break pages intelligently
-            callback: function(doc) {
-                // Add footer to every page
-                const pageCount = doc.internal.getNumberOfPages();
-                for (let i = 1; i <= pageCount; i++) {
-                    doc.setPage(i);
-                    doc.addImage(footerImg, 'PNG', 0, pdfH - footerHeightPt, pdfW, footerHeightPt);
-                }
-                
-                const filename = mode === 'single'
-                  ? `تقارير_${sectionTitle || 'قسم'}.pdf`
-                  : `تقارير_جميع_الأقسام.pdf`;
-                doc.save(filename);
+        if (totalHeightPt + footerHeightPt <= pdfH) {
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfW, imgH * ratio);
+          pdf.addImage(footerImg, 'PNG', 0, pdfH - footerHeightPt, pdfW, footerHeightPt);
+        } else {
+          let y = 0;
+          const pageHeightPx = (pdfH - footerHeightPt) / ratio;
+          let first = true;
+
+          while (y < imgH) {
+            const sliceHeight = Math.min(pageHeightPx, imgH - y);
+            const pageCanvas = document.createElement('canvas');
+            pageCanvas.width = imgW;
+            pageCanvas.height = sliceHeight;
+            const ctx = pageCanvas.getContext('2d');
+            ctx.drawImage(canvas, 0, y, imgW, sliceHeight, 0, 0, imgW, sliceHeight);
+            const pageData = pageCanvas.toDataURL('image/png');
+
+            if (first) {
+              pdf.addImage(pageData, 'PNG', 0, 0, pdfW, sliceHeight * ratio);
+              first = false;
+            } else {
+              pdf.addPage();
+              pdf.addImage(pageData, 'PNG', 0, 0, pdfW, sliceHeight * ratio);
             }
-        });
-        // --- END NEW LOGIC ---
+            const isHealthGuide = (mode === 'single' && sectionTitle.trim() === 'الموجه الصحي');
+            const footerImgPerPage = buildFooterImageDataUrl(isHealthGuide);
+            pdf.addImage(footerImgPerPage, 'PNG', 0, pdfH - footerHeightPt, pdfW, footerHeightPt);
+
+            y += sliceHeight;
+          }
+        }
+
+        const filename = mode === 'single'
+          ? `تقارير_${sectionTitle || 'قسم'}.pdf`
+          : `تقارير_جميع_الأقسام.pdf`;
+        pdf.save(filename);
 
       } catch (err) {
         console.error('Print error:', err);
@@ -1966,6 +2022,4 @@
   </script>
 </body>
 </html>
-
-
 
