@@ -28,6 +28,18 @@
     font-size: 13px;
   }
 
+  .header-buttons {
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 4px;
+  }
+  /* ---- تعديل: ضمان أن الأزرار يمكنها الانكماش ---- */
+  .header-buttons > * {
+      min-width: 0;
+  }
+  /* ---- نهاية التعديل ---- */
+
+
   h1 {
     font-size: 1.1rem;
   }
@@ -54,7 +66,7 @@
     height: 18px;
   }
 
-  #print-all-btn, #login-admin-btn {
+  #print-all-btn, #login-admin-btn, #site-settings-btn, #admin-panel-btn, #requests-btn, #add-section-btn, #logout-admin-btn, #create-user-section-btn {
     padding: 6px 10px;
     font-size: 0.85rem;
   }
@@ -93,7 +105,7 @@
     .print-header {
       display: grid;
       grid-template-columns: 1fr 2fr 1fr;
-      align-items: center; gap: 16px; 
+      align-items: center; gap: 16px;
       padding-bottom: 10px; /* أضفنا مساحة سفلية للترويسة */
       /* margin-bottom: 16px;  أزلنا الهامش السفلي من هنا */
     }
@@ -102,8 +114,12 @@
 
     .table { width: 100%; border-collapse: collapse; margin-top: 8px; }
     /* ضمان تكرار رأس الجدول في الطباعة */
-    .table thead { 
-        display: table-header-group; 
+    .table thead {
+        display: table-header-group;
+    }
+    .table tr {
+        page-break-inside: avoid !important; /* منع كسر الصف بين الصفحات (تم تقويته) */
+        break-inside: avoid !important; /* الصياغة الحديثة */
     }
     .table th, .table td { border: 1px solid #e5e7eb; padding: 8px; vertical-align: middle; }
     .table thead th { background: #065f46; color: #fff; text-align: center; font-weight: 700; }
@@ -120,7 +136,15 @@
       border-bottom: 1px solid #d1d5db;
       border-top: 1px solid #d1d5db;
       border-radius: 4px 0 0 4px;
+      page-break-after: avoid; /* منع كسر الصفحة بعد العنوان مباشرة */
     }
+
+    /* ==== تعديل لإصلاح الطباعة ==== */
+    .section-print-block {
+        page-break-inside: avoid !important; /* محاولة إبقاء القسم مع جدوله (تم تقويته) */
+        break-inside: avoid !important; /* الصياغة الحديثة */
+    }
+
 
     /* شريط تقدم عداد التخزين */
     .usage-bar { height: 10px; border-radius: 9999px; width: 100%; background: #e5e7eb; overflow: hidden; }
@@ -141,7 +165,7 @@
         font-size: 10px;
         font-weight: bold;
     }
-    
+
     .recording {
         animation: pulse 1.5s infinite;
     }
@@ -151,12 +175,20 @@
         100% { transform: scale(1); }
     }
 
+    /* Toggle Switch */
+    .switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: #22c55e; }
+    input:checked + .slider:before { transform: translateX(22px); }
+
 
     /* ======== 🔒 منع التمدد الأفقي بالكامل للجوال وجميع الأجهزة ======== */
     html, body {
-      width: 100% !important;
-      max-width: 100% !important;
-      overflow-x: hidden !important;
+      width: 100%;
+      max-width: 100%; /* تغيير من !important */
+      overflow-x: hidden !important; /* الإبقاء على !important هنا ضروري */
     }
     *, *::before, *::after {
       box-sizing: border-box;
@@ -165,13 +197,24 @@
       max-width: 100%;
       height: auto;
     }
+    /* تمت إزالة !important من max-width هنا للسماح للعناصر الداخلية بالتحكم */
     .container, main, header, footer, section, div {
-      max-width: 100% !important;
-      overflow-x: hidden !important;
+      max-width: 100%;
+      overflow-x: hidden !important; /* الإبقاء على !important هنا ضروري */
     }
     /* إصلاح داخل عناصر flex حتى لا تتمدد الروابط وتسبب سكرول أفقي */
     .link-item .flex { min-width: 0; }
     .link-item a { min-width: 0; }
+
+    /* ---- تعديل: كسر الكلمات الطويلة (مثل IDs) ---- */
+    #super-admin-id,
+    #admin-list .font-mono,
+    #admin-chat-list .font-mono {
+        overflow-wrap: break-word;
+        word-break: break-all; /* For stricter breaking */
+    }
+    /* ---- نهاية التعديل ---- */
+
   </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -194,14 +237,18 @@
         </svg>
         <h1 class="text-xl md:text-2xl font-bold text-green-800">منصة مدرسة الراشدون</h1>
       </div>
-      <div class="flex items-center space-x-2 space-x-reverse mt-2 sm:mt-0">
+      <div class="flex items-center space-x-2 space-x-reverse mt-2 sm:mt-0 header-buttons">
         <div id="user-info" class="text-sm text-gray-500"></div>
+        <button id="create-user-section-btn" class="hidden bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">إنشاء قسمي الخاص</button>
         <button id="add-section-btn" class="hidden bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">إضافة قسم</button>
         <div class="relative">
             <button id="requests-btn" class="hidden bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">طلبات الصلاحيات</button>
             <div id="requests-badge" class="notification-badge hidden"></div>
         </div>
         <button id="admin-panel-btn" class="hidden bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">إدارة المسؤولين</button>
+        <button id="site-settings-btn" class="hidden bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826 3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        </button>
         <button id="logout-admin-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">تسجيل الخروج</button>
         <!-- زر تسجيل دخول المدير (دائمًا ظاهر) -->
         <button id="login-admin-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">تسجيل دخول المدير</button>
@@ -223,12 +270,12 @@
 
     <div id="sections-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden"></div>
   </main>
-  
+
   <!-- NEW: Chat FAB -->
     <button id="chat-fab" class="fixed bottom-6 left-6 bg-green-600 text-white p-4 rounded-full shadow-lg hover:bg-green-700 transition-transform hover:scale-110 z-20">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
     </button>
-    
+
     <!-- NEW: Name Prompt Modal -->
     <div id="name-prompt-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-75 items-center justify-center z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm mx-4">
@@ -295,6 +342,7 @@
     <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
       <h2 id="section-modal-title" class="text-xl font-bold mb-4">إضافة قسم جديد</h2>
       <form id="section-form">
+        <input type="hidden" id="section-owner-id" />
         <div class="mb-4">
           <label class="block text-gray-700 text-sm font-bold mb-2">عنوان القسم:</label>
           <input type="text" id="section-title" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:shadow-outline" required />
@@ -302,7 +350,7 @@
         <div class="mb-4">
           <label class="flex items-center">
             <input type="checkbox" id="section-private" class="form-checkbox h-5 w-5 text-blue-600" />
-            <span class="mr-2 text-gray-700">اجعل هذا القسم خاصًا (مرئي للمسؤولين فقط)</span>
+            <span id="section-private-label" class="mr-2 text-gray-700">اجعل هذا القسم خاصًا (مرئي للمسؤولين فقط)</span>
           </label>
         </div>
         <div class="flex items-center justify-end space-x-4 space-x-reverse">
@@ -363,7 +411,7 @@
       </form>
     </div>
   </div>
-  
+
     <!-- NEW: Requests Modal -->
     <div id="requests-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-30">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 h-full max-h-[90vh] flex flex-col">
@@ -376,7 +424,54 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- NEW: Site Settings Modal -->
+    <div id="site-settings-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-40">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
+            <h2 class="text-xl font-bold mb-6 text-center">إعدادات الموقع العام</h2>
+            <div class="space-y-4">
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <label for="toggle-chat" class="font-semibold text-gray-700">تفعيل الدردشة</label>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-chat">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <label for="toggle-printing" class="font-semibold text-gray-700">تفعيل الطباعة</label>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-printing">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <label for="toggle-sharing" class="font-semibold text-gray-700">تفعيل المشاركة (واتساب)</label>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-sharing">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <label for="toggle-editing" class="font-semibold text-gray-700">السماح بالتحرير (لمسؤولي الأقسام)</label>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-editing">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <label for="toggle-user-sections" class="font-semibold text-gray-700">السماح للمستخدمين بإنشاء أقسام</label>
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-user-sections">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="flex items-center justify-end mt-6">
+                <button type="button" id="site-settings-close" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
     <!-- NEW: Chat Modal -->
     <div id="chat-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-30">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 h-full max-h-[70vh] flex flex-col">
@@ -389,10 +484,10 @@
             </div>
             <div class="p-4 border-t">
                  <div id="emoji-panel" class="hidden bg-white border rounded-lg shadow-lg p-2 grid grid-cols-8 gap-2 w-64 mb-2">
-                    <!-- Emojis will be populated here -->
-                </div>
+                     <!-- Emojis will be populated here -->
+                 </div>
                 <form id="chat-form" class="flex items-center space-x-2 space-x-reverse">
-                     <button type="button" id="record-audio-btn" class="text-gray-500 hover:text-gray-700 p-2 rounded-full">
+                    <button type="button" id="record-audio-btn" class="text-gray-500 hover:text-gray-700 p-2 rounded-full">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
                     </button>
                     <button type="button" id="emoji-btn" class="text-gray-500 hover:text-gray-700 p-2 rounded-full">
@@ -406,7 +501,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- NEW: Admin Chat List Modal -->
     <div id="admin-chat-list-modal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 items-center justify-center z-30">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-4 h-full max-h-[80vh] flex flex-col">
@@ -474,7 +569,16 @@
     /* ======================= State ======================= */
     let currentUser = null;
     let userRoles = { isSuperAdmin: false, isSectionAdmin: false, managedSections: [] };
-    let sectionsData = [];
+    let sectionsData = []; // Will hold merged system and user sections
+    let systemSections = []; // Original admin sections
+    let userSections = []; // User-created sections
+    let siteSettings = { // Default site settings
+        allowChat: true,
+        allowPrinting: true,
+        allowSharing: true,
+        allowEditing: true, // For section admins
+        allowUserSections: false
+    };
     let sortable = null;
     let currentChatUnsubscribe = null;
     let currentChatUserId = null;
@@ -508,7 +612,10 @@
     const sectionForm = document.getElementById('section-form');
     const sectionTitleInput = document.getElementById('section-title');
     const sectionPrivateCheckbox = document.getElementById('section-private');
+    const sectionPrivateLabel = document.getElementById('section-private-label');
     const addSectionBtn = document.getElementById('add-section-btn');
+    const createUserSectionBtn = document.getElementById('create-user-section-btn');
+
 
     const adminModal = document.getElementById('admin-modal');
     const adminPanelBtn = document.getElementById('admin-panel-btn');
@@ -531,13 +638,13 @@
     const usageFillEl = document.getElementById('usage-fill');
     const storageUsageEl = document.getElementById('storage-usage');
     const recalculateStorageBtn = document.getElementById('recalculate-storage-btn');
-    
+
     // New DOM elements for requests and chat
     const requestsBtn = document.getElementById('requests-btn');
     const requestsBadge = document.getElementById('requests-badge');
     const requestsModal = document.getElementById('requests-modal');
     const requestsList = document.getElementById('requests-list');
-    
+
     const chatFab = document.getElementById('chat-fab');
     const chatModal = document.getElementById('chat-modal');
     const chatMessages = document.getElementById('chat-messages');
@@ -552,7 +659,17 @@
     const emojiBtn = document.getElementById('emoji-btn');
     const emojiPanel = document.getElementById('emoji-panel');
     const recordAudioBtn = document.getElementById('record-audio-btn');
-    
+
+    // Site Settings Modal
+    const siteSettingsBtn = document.getElementById('site-settings-btn');
+    const siteSettingsModal = document.getElementById('site-settings-modal');
+    const toggleChat = document.getElementById('toggle-chat');
+    const togglePrinting = document.getElementById('toggle-printing');
+    const toggleSharing = document.getElementById('toggle-sharing');
+    const toggleEditing = document.getElementById('toggle-editing');
+    const toggleUserSections = document.getElementById('toggle-user-sections');
+
+
     /* ======================= Audio Notifications ======================= */
     let audioCtx;
 
@@ -561,7 +678,7 @@
         if (audioCtx.state === 'suspended') {
             audioCtx.resume();
         }
-        
+
         const oscillator = audioCtx.createOscillator();
         const gainNode = audioCtx.createGain();
 
@@ -598,26 +715,32 @@
       `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-orange-500"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`,
       `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-indigo-500"><path d="m9 12 2 2 4-4"/><path d="M5 7c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2Z"/></svg>`,
     ];
-    
+
     /* ============= بناء بطاقات الأقسام (مع زر طباعة القسم) ============= */
     function createSectionHTML(sectionDoc) {
       const section = sectionDoc.data();
-      const canManage = userRoles.isSuperAdmin || userRoles.managedSections.includes(section.collectionName);
 
-      const deleteBtn = userRoles.isSuperAdmin
-        ? `<button class="delete-section-btn text-gray-400 hover:text-red-500 p-1" data-id="${sectionDoc.id}" data-title="${section.title}">
+      const isOwner = section.ownerId && section.ownerId === currentUser?.uid;
+      const canManageSection = userRoles.isSuperAdmin || (userRoles.isSectionAdmin && userRoles.managedSections.includes(section.collectionName));
+      const canPerformEdits = userRoles.isSuperAdmin || (canManageSection && siteSettings.allowEditing) || (isOwner);
+      const canDelete = userRoles.isSuperAdmin || isOwner;
+      const canEdit = userRoles.isSuperAdmin || isOwner;
+
+
+      const deleteBtn = canDelete
+        ? `<button class="delete-section-btn text-gray-400 hover:text-red-500 p-1" data-id="${sectionDoc.id}" data-title="${section.title}" title="حذف القسم">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
             </svg>
-            </button>` : '';
-            
-    const requestPermissionBtn = (!userRoles.isSuperAdmin && !canManage)
+           </button>` : '';
+
+      const requestPermissionBtn = (!userRoles.isSuperAdmin && !canManageSection && !isOwner)
         ? `<div class="mt-4"><button class="request-permission-btn w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition" data-section-id="${section.collectionName}" data-section-title="${section.title}">طلب صلاحية تحكم</button></div>`
         : '';
 
 
-      const addLinkBtn = canManage
+      const addLinkBtn = canPerformEdits
         ? `<div class="mt-4"><button class="add-link-btn w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg transition" data-section="${section.collectionName}">إضافة عنصر</button></div>`
         : '';
 
@@ -625,24 +748,28 @@
         ? `<svg class="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm-2.5 8V5.5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5V9h-5z" clip-rule="evenodd" /></svg>`
         : '';
 
-      const printThisSectionBtn = `
-        <button class="print-section-btn text-emerald-700 hover:text-emerald-900 font-bold text-sm bg-emerald-50 px-2 py-1 rounded flex items-center space-x-1 space-x-reverse"
+      // ==== تعديل لإزالة النص من الأزرار وإضافة title ====
+      const printThisSectionBtn = siteSettings.allowPrinting ? `
+        <button class="print-section-btn text-emerald-700 hover:text-emerald-900 bg-emerald-50 p-2 rounded flex items-center"
+                title="طباعة هذا القسم"
                 data-id="${sectionDoc.id}" data-title="${section.title}" data-collection="${section.collectionName}">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-            <span>طباعة</span>
-        </button>`;
-        
-      const shareSectionBtn = `
-        <button class="share-section-btn text-green-600 hover:text-green-800 font-bold text-sm bg-green-50 px-2 py-1 rounded flex items-center space-x-1 space-x-reverse"
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            <!-- <span>طباعة</span> -->
+        </button>` : '';
+
+      const shareSectionBtn = siteSettings.allowSharing ? `
+        <button class="share-section-btn text-green-600 hover:text-green-800 bg-green-50 p-2 rounded flex items-center"
+                title="مشاركة هذا القسم"
                 data-collection="${section.collectionName}" data-title="${section.title}">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.487 5.235 3.487 8.413.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 4.318 1.738 6.088l.249.448-1.152 4.224 4.273-1.124.416.249z"/></svg>
-            <span>مشاركة</span>
-        </button>`;
-        
-      const editSectionBtn = userRoles.isSuperAdmin
-        ? `<button class="edit-section-btn p-1 text-blue-500 hover:text-blue-700" data-id="${sectionDoc.id}" data-title="${section.title}" data-private="${section.isPrivate}">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.487 5.235 3.487 8.413.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 4.318 1.738 6.088l.249.448-1.152 4.224 4.273-1.124.416.249z"/></svg>
+            <!-- <span>مشاركة</span> -->
+        </button>` : '';
+      // ==== نهاية التعديل ====
+
+      const editSectionBtn = canEdit
+        ? `<button class="edit-section-btn p-1 text-blue-500 hover:text-blue-700" data-id="${sectionDoc.id}" data-title="${section.title}" data-private="${section.isPrivate}" title="تعديل القسم">
                 <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
-            </button>`
+           </button>`
         : '';
 
       return `
@@ -656,6 +783,7 @@
                         ${editSectionBtn}
                     </h2>
                 </div>
+                <!-- تعديل: تقليل المسافة بين الأيقونات -->
                 <div class="flex items-center space-x-1 space-x-reverse flex-shrink-0">
                     ${shareSectionBtn}
                     ${printThisSectionBtn}
@@ -672,16 +800,20 @@
 
     function createLinkItemHTML(docSnap, sectionCollectionName) {
       const data = docSnap.data();
-      const canManage = userRoles.isSuperAdmin || userRoles.managedSections.includes(sectionCollectionName);
+      const section = sectionsData.find(s => s.data().collectionName === sectionCollectionName)?.data();
+      const isOwner = section?.ownerId && section.ownerId === currentUser?.uid;
+      const canManageSection = userRoles.isSuperAdmin || (userRoles.isSectionAdmin && userRoles.managedSections.includes(sectionCollectionName));
+      const canPerformEdits = userRoles.isSuperAdmin || (canManageSection && siteSettings.allowEditing) || (isOwner);
+
 
       let adminControls = '';
-      if (canManage) {
+      if (canPerformEdits) {
         adminControls = `
           <button class="edit-link-btn p-2 text-blue-500 hover:text-blue-700 rounded-full hover:bg-gray-200"
-                  data-id="${docSnap.id}" data-type="${data.type || 'url'}" data-title="${data.title}" data-url="${data.url}">
+                  data-id="${docSnap.id}" data-type="${data.type || 'url'}" data-title="${data.title}" data-url="${data.url}" title="تعديل العنصر">
             <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
           </button>
-          <button class="delete-link-btn p-2 text-red-500 hover:text-red-700 rounded-full hover:bg-gray-200" data-id="${docSnap.id}">
+          <button class="delete-link-btn p-2 text-red-500 hover:text-red-700 rounded-full hover:bg-gray-200" data-id="${docSnap.id}" title="حذف العنصر">
             <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" /></svg>
           </button>`;
       }
@@ -691,11 +823,11 @@
         : `<svg class="w-5 h-5 text-teal-600 ml-3 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" /><path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z" /></svg>`;
 
       const shareText = encodeURIComponent(`${data.title}\n${data.url}`);
-      const whatsappShareButton = `
+      const whatsappShareButton = siteSettings.allowSharing ? `
         <a href="https://api.whatsapp.com/send?text=${shareText}" target="_blank" rel="noopener noreferrer"
            class="p-2 rounded-full hover:bg-gray-200 text-green-600 flex items-center justify-center transition-colors" title="مشاركة عبر واتساب">
           <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.487 5.235 3.487 8.413.003 6.557-5.338 11.892-11.894 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 4.318 1.738 6.088l.249.448-1.152 4.224 4.273-1.124.416.249z"/></svg>
-        </a>`;
+        </a>` : '';
 
       return `
         <div class="link-item flex items-center justify-between p-2 rounded-md border">
@@ -750,21 +882,35 @@
       try { await batch.commit(); } catch (e) { console.error('Error saving order:', e); }
     }
 
-    function renderAllSections(sections) {
+    function renderAllSections(allSections) {
         // Unsubscribe from old link listeners before re-rendering
         Object.values(linkUnsubscribes).forEach(unsub => unsub());
         linkUnsubscribes = {};
 
-      let visible = sections;
-      if (!userRoles.isSuperAdmin) {
-        visible = sections.filter(doc => {
-          const sec = doc.data();
-          return !sec.isPrivate || userRoles.managedSections.includes(sec.collectionName);
-        });
-      }
+        // Filter sections based on permissions
+        sectionsData = allSections; // Store all sections for reference
+        let visibleSections = sectionsData.filter(doc => {
+            const sec = doc.data();
+            const isOwner = sec.ownerId && sec.ownerId === currentUser?.uid;
+            const isSystemSection = !sec.ownerId;
+            const canSeePrivate = userRoles.isSuperAdmin || (userRoles.isSectionAdmin && userRoles.managedSections.includes(sec.collectionName));
 
-      sectionsGrid.innerHTML = visible.map(createSectionHTML).join('');
-      visible.forEach(secDoc => renderLinks(secDoc.data().collectionName));
+            if (isSystemSection) {
+                return !sec.isPrivate || canSeePrivate; // Show public system sections OR private ones if admin
+            }
+            if (isOwner) {
+                return true; // Always show my own sections
+            }
+            if (!sec.isPrivate) {
+                return true; // Show other users' public sections
+            }
+
+            return false; // Hide other users' private sections
+        });
+
+
+      sectionsGrid.innerHTML = visibleSections.map(createSectionHTML).join('');
+      visibleSections.forEach(secDoc => renderLinks(secDoc.data().collectionName));
 
       loadingSpinner.style.display = 'none';
       sectionsGrid.classList.remove('hidden');
@@ -779,21 +925,35 @@
         document.querySelectorAll('.section-card').forEach(c => c.classList.remove('draggable'));
       }
     }
-    
+
     function updateUserInfoDisplay() {
         const userInfoEl = document.getElementById('user-info');
         const userName = localStorage.getItem('userName');
         if (userName) {
              userInfoEl.innerHTML = `<div class="text-right">
-                <span class="font-bold">${userName}</span>
-                <button id="edit-name-btn" class="text-xs text-blue-500 hover:underline mr-1">(تغيير)</button>
+                 <span class="font-bold">${userName}</span>
+                 <button id="edit-name-btn" class="text-xs text-blue-500 hover:underline mr-1">(تغيير)</button>
              </div>`;
         } else {
              userInfoEl.innerHTML = `<div class="text-right">
-                <div class="text-sm">وضع المشاهدة.</div>
-                <div class="mt-1 text-xs text-gray-600">للتعديل، اطلب صلاحية أو تواصل مع المدير.</div>
-            </div>`;
+                 <div class="text-sm">وضع المشاهدة.</div>
+                 <div class="mt-1 text-xs text-gray-600">للتعديل، اطلب صلاحية أو تواصل مع المدير.</div>
+             </div>`;
         }
+    }
+
+
+    function updateUiForSiteSettings() {
+        // Update UI based on siteSettings
+        chatFab.style.display = (siteSettings.allowChat || userRoles.isSuperAdmin) ? 'block' : 'none';
+        printAllBtn.style.display = siteSettings.allowPrinting ? 'inline-flex' : 'none';
+
+        // Show/hide user section creation button
+        const canCreateUserSection = !userRoles.isSuperAdmin && !userRoles.isSectionAdmin && siteSettings.allowUserSections;
+        createUserSectionBtn.style.display = canCreateUserSection ? 'inline-flex' : 'none';
+
+        // Re-render sections to apply print/share/edit toggles
+        renderAllSections(sectionsData);
     }
 
 
@@ -803,6 +963,8 @@
       const addSectionBtnEl = document.getElementById('add-section-btn');
       const loginAdminBtnEl = document.getElementById('login-admin-btn');
       const logoutAdminBtnEl = document.getElementById('logout-admin-btn');
+      const siteSettingsBtnEl = document.getElementById('site-settings-btn');
+
 
       const sessionIsSuper = sessionStorage.getItem('isSuperAdmin') === 'true';
       if (sessionIsSuper) userRoles.isSuperAdmin = true;
@@ -814,6 +976,7 @@
         loginAdminBtnEl.classList.add('hidden');
         logoutAdminBtnEl.classList.remove('hidden');
         requestsBtn.classList.remove('hidden');
+        siteSettingsBtnEl.classList.remove('hidden');
       } else if (userRoles.isSectionAdmin) {
         userInfoEl.innerHTML = 'مرحباً يا مسؤول القسم!';
         adminPanelBtnEl.classList.add('hidden');
@@ -821,6 +984,7 @@
         loginAdminBtnEl.classList.remove('hidden');
         logoutAdminBtnEl.classList.add('hidden');
         requestsBtn.classList.add('hidden');
+        siteSettingsBtnEl.classList.add('hidden');
       } else {
         updateUserInfoDisplay();
         adminPanelBtnEl.classList.add('hidden');
@@ -828,21 +992,28 @@
         loginAdminBtnEl.classList.remove('hidden');
         logoutAdminBtnEl.classList.add('hidden');
         requestsBtn.classList.add('hidden');
+        siteSettingsBtnEl.classList.add('hidden');
       }
-      renderAllSections(sectionsData);
+
+      // Update UI based on global settings AFTER roles are set
+      updateUiForSiteSettings();
     }
 
     function setupSectionsListener() {
       const sectionsRef = collection(db, `/artifacts/${appId}/public/data/sections_config`);
       const qSections = query(sectionsRef, orderBy('order', 'asc'));
-      const unsubscribe = onSnapshot(qSections, (snap) => { sectionsData = snap.docs; updateUiBasedOnRoles(); });
+      const unsubscribe = onSnapshot(qSections, (snap) => {
+          systemSections = snap.docs;
+          renderAllSections(systemSections); // Initially render just system sections
+      });
       mainUnsubscribes.push(unsubscribe);
     }
 
     function renderAdminManagement(adminData) {
       document.getElementById('super-admin-id').textContent = adminData.superAdmin || 'غير محدد';
       const permissionsContainer = document.getElementById('new-admin-permissions');
-      permissionsContainer.innerHTML = sectionsData.map(doc => {
+      // Only show system sections in admin panel
+      permissionsContainer.innerHTML = systemSections.map(doc => {
         const sec = doc.data();
         const lock = sec.isPrivate ? `<svg class="w-4 h-4 text-gray-400 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm-2.5 8V5.5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5V9h-5z" clip-rule="evenodd"/></svg>` : '';
         return `<label class="flex items-center"><input type="checkbox" class="form-checkbox" name="permissions" value="${sec.collectionName}"><span class="mr-2 flex items-center">${lock}${sec.title}</span></label>`;
@@ -853,7 +1024,8 @@
       const sectionAdmins = adminData.sectionAdmins || {};
       if (Object.keys(sectionAdmins).length === 0) adminList.innerHTML = '<p class="text-gray-500 p-4 text-center">لا يوجد مسؤولو أقسام حاليًا.</p>';
       Object.entries(sectionAdmins).forEach(([uid, permissions]) => {
-        const managedTitles = sectionsData.filter(doc => permissions.includes(doc.data().collectionName)).map(doc => doc.data().title).join(', ') || 'لا يوجد';
+        // Only show permissions for system sections
+        const managedTitles = systemSections.filter(doc => permissions.includes(doc.data().collectionName)).map(doc => doc.data().title).join(', ') || 'لا يوجد';
         const card = document.createElement('div');
         card.className = 'p-3 bg-gray-100 rounded';
         card.innerHTML = `
@@ -872,9 +1044,57 @@
       mainUnsubscribes = [];
       Object.values(linkUnsubscribes).forEach(unsub => unsub());
       linkUnsubscribes = {};
-      
+
       if (user) {
         currentUser = user;
+
+        // --- Setup Listeners ---
+
+        // 1. Site Settings Listener
+        const settingsRef = doc(db, `/artifacts/${appId}/public/data/config/site_settings`);
+        const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
+            console.log("Site settings snapshot received."); // Log snapshot received
+            if (docSnap.exists()) {
+                console.log("Settings doc exists. Data:", docSnap.data()); // Log existing data
+                // Ensure we merge correctly, handling potential undefined values from Firestore
+                const firestoreData = docSnap.data();
+                siteSettings = {
+                    allowChat: firestoreData.allowChat ?? true, // Provide defaults
+                    allowPrinting: firestoreData.allowPrinting ?? true,
+                    allowSharing: firestoreData.allowSharing ?? true,
+                    allowEditing: firestoreData.allowEditing ?? true,
+                    allowUserSections: firestoreData.allowUserSections ?? false, // Default to false
+                };
+                console.log("Updated local siteSettings:", siteSettings); // Log updated local state
+            } else {
+                console.log("Settings doc does not exist."); // Log non-existence
+                // If settings doc doesn't exist, reset to defaults locally
+                // and create it with defaults (only if super admin)
+                siteSettings = {
+                    allowChat: true,
+                    allowPrinting: true,
+                    allowSharing: true,
+                    allowEditing: true,
+                    allowUserSections: false // Ensure default is used
+                };
+                if(userRoles.isSuperAdmin) {
+                    console.log("Creating default settings in Firestore..."); // Log creation attempt
+                    setDoc(settingsRef, siteSettings)
+                        .then(() => console.log("Default settings created.")) // Log creation success
+                        .catch(e => console.error("Error setting default settings:", e));
+                }
+            }
+            // Always update UI after processing snapshot
+            console.log("Calling UI updates from settings listener...");
+            updateUiForSiteSettings();
+            updateSiteSettingsModalToggles();
+        }, (error) => { // Add error handler for the listener itself
+            console.error("Error in site settings listener:", error);
+        });
+        mainUnsubscribes.push(settingsUnsubscribe);
+
+
+        // 2. Admin Roles Listener
         const adminRef = doc(db, `/artifacts/${appId}/public/data/config/admin_doc`);
         try {
           const adminDocSnap = await getDoc(adminRef);
@@ -914,6 +1134,7 @@
         });
         mainUnsubscribes.push(adminUnsubscribe);
 
+        // 3. Sections Listener (merges system and user sections)
         setupSectionsListener();
 
       } else {
@@ -937,7 +1158,6 @@
 
       if (addBtn) {
         const sectionCollection = addBtn.dataset.section;
-        if (!userRoles.isSuperAdmin && !userRoles.managedSections.includes(sectionCollection)) return;
         linkModal.classList.add('show');
         modalSectionIdInput.value = sectionCollection;
         modalLinkIdInput.value = '';
@@ -949,23 +1169,22 @@
         linkUrlInput.required = false;
 
       }
-      if (editSectionBtn && userRoles.isSuperAdmin) {
+      if (editSectionBtn) {
             const { id, title, private: isPrivate } = editSectionBtn.dataset;
-            
+
             // Set modal for editing
             document.getElementById('section-modal-title').textContent = 'تعديل القسم';
             document.getElementById('section-modal-submit').textContent = 'حفظ التعديلات';
             sectionTitleInput.value = title;
             sectionPrivateCheckbox.checked = (isPrivate === 'true');
-            
+
             // Store the ID for the submit handler
-            sectionModal.dataset.editingId = id; 
-            
+            sectionModal.dataset.editingId = id;
+
             sectionModal.classList.add('show');
         }
       if (editBtn) {
         const sectionCollection = editBtn.closest('.link-list').id;
-        if (!userRoles.isSuperAdmin && !userRoles.managedSections.includes(sectionCollection)) return;
         const { id, title, url, type } = editBtn.dataset;
         linkModal.classList.add('show');
         modalSectionIdInput.value = sectionCollection;
@@ -988,7 +1207,6 @@
       }
       if (deleteLinkBtn) {
             const sectionCollection = deleteLinkBtn.closest('.link-list').id;
-            if (!userRoles.isSuperAdmin && !userRoles.managedSections.includes(sectionCollection)) return;
             if (confirm('هل أنت متأكد من حذف هذا العنصر؟')) {
                 const linkId = deleteLinkBtn.dataset.id;
                 const docPath = `/artifacts/${appId}/public/data/${sectionCollection}/${linkId}`;
@@ -997,7 +1215,7 @@
                 getDoc(docRef).then(async (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
-                        
+
                         if (data.type === 'file' && data.url) {
                             try {
                                 const fileRef = ref(storage, data.url);
@@ -1006,23 +1224,23 @@
                                 console.warn("Could not delete file from storage, it might have been already deleted:", storageError);
                             }
                         }
-                        
+
                         const sizeToDecrement = data.size || 0;
                         if (sizeToDecrement > 0) {
                             const storageInfoRef = doc(db, `/artifacts/${appId}/public/data/config/storage_info`);
                             await setDoc(storageInfoRef, { totalSize: increment(-sizeToDecrement) }, { merge: true });
                         }
                     }
-                    
+
                     await deleteDoc(docRef);
-                    
+
                 }).catch(err => {
                     console.error('Error during deletion process:', err);
                     alert('حدث خطأ أثناء الحذف.');
                 });
             }
         }
-      if (deleteSectionBtn && userRoles.isSuperAdmin) {
+      if (deleteSectionBtn) {
         const sectionTitle = deleteSectionBtn.dataset.title;
         if (confirm(`هل أنت متأكد من حذف قسم "${sectionTitle}"؟ سيتم حذف جميع العناصر داخله.`)) {
           const sectionId = deleteSectionBtn.dataset.id;
@@ -1035,7 +1253,7 @@
         const collectionName = printSectionBtn.dataset.collection;
         generateSectionsPDF({ mode: 'single', sectionTitle, collectionName });
       }
-      if (shareSectionBtn) { 
+      if (shareSectionBtn) {
             const sectionTitle = shareSectionBtn.dataset.title;
             const collectionName = shareSectionBtn.dataset.collection;
             shareSection(sectionTitle, collectionName);
@@ -1085,8 +1303,13 @@
         const sectionCollection = modalSectionIdInput.value;
         const linkId = modalLinkIdInput.value;
         const entryType = document.querySelector('input[name="entry-type"]:checked').value;
-        const canManage = userRoles.isSuperAdmin || userRoles.managedSections.includes(sectionCollection);
-        if (!title || !sectionCollection || !canManage) return;
+
+        const section = sectionsData.find(s => s.data().collectionName === sectionCollection)?.data();
+        const isOwner = section?.ownerId && section.ownerId === currentUser?.uid;
+        const canManageSection = userRoles.isSuperAdmin || (userRoles.isSectionAdmin && userRoles.managedSections.includes(sectionCollection));
+        const canPerformEdits = userRoles.isSuperAdmin || (canManageSection && siteSettings.allowEditing) || (isOwner);
+
+        if (!title || !sectionCollection || !canPerformEdits) return;
 
         const collectionPath = `/artifacts/${appId}/public/data/${sectionCollection}`;
 
@@ -1110,26 +1333,26 @@
             document.getElementById('modal-save').disabled = true;
             uploadProgressContainer.classList.remove('hidden');
 
-            uploadTask.on('state_changed', 
+            uploadTask.on('state_changed',
                 (snapshot) => {
                     const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
                     uploadProgressBar.style.width = progress + '%';
-                }, 
+                },
                 (error) => {
                     console.error('Upload failed:', error);
                     alert('فشل رفع الملف.');
                     document.getElementById('modal-save').disabled = false;
                     uploadProgressContainer.classList.add('hidden');
 
-                }, 
+                },
                 async () => {
                     try {
                         const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                         const fileSize = uploadTask.snapshot.totalBytes;
                         const data = { title, url: downloadURL, type: 'file', createdAt: serverTimestamp(), size: fileSize };
-                        
+
                         await addDoc(collection(db, collectionPath), data);
-                        
+
                         const storageInfoRef = doc(db, `/artifacts/${appId}/public/data/config/storage_info`);
                         await setDoc(storageInfoRef, { totalSize: increment(fileSize) }, { merge: true });
 
@@ -1144,7 +1367,7 @@
                     }
                 }
             );
-            
+
         } else { // URL type
             const url = linkUrlInput.value.trim();
             if (!url) { alert('الرجاء إدخال رابط.'); return; }
@@ -1157,14 +1380,14 @@
         }
     });
 
-    // إضافة قسم
+    // إضافة/تعديل قسم
     sectionForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const title = sectionTitleInput.value.trim();
-      if (!title || !userRoles.isSuperAdmin) return;
-      
+      if (!title) return;
+
       const sectionId = sectionModal.dataset.editingId;
-      
+
       if (sectionId) {
           // EDIT MODE
           const docRef = doc(db, `/artifacts/${appId}/public/data/sections_config`, sectionId);
@@ -1179,18 +1402,30 @@
               alert('فشل في تحديث القسم.');
           }
       } else {
-          // ADD MODE (existing logic)
-          const newIcon = iconPool[sectionsData.length % iconPool.length] || defaultIcon;
+          // ADD MODE
+          const newIcon = iconPool[systemSections.length % iconPool.length] || defaultIcon;
           const collectionName = title.toLowerCase().replace(/\s+/g, '_').replace(/[^\u0600-\u06FFa-z0-9_]/g, '') + '_' + Date.now();
+
+          const data = {
+              title,
+              icon: newIcon,
+              collectionName,
+              createdAt: serverTimestamp(),
+              order: sectionsData.length, // Order among all sections
+              isPrivate: sectionPrivateCheckbox.checked
+          };
+
+          if (!userRoles.isSuperAdmin) {
+              data.ownerId = currentUser.uid;
+              data.ownerName = localStorage.getItem('userName') || 'مجهول';
+          }
+
           try {
-            await addDoc(collection(db, `/artifacts/${appId}/public/data/sections_config`), {
-              title, icon: newIcon, collectionName, createdAt: serverTimestamp(),
-              order: sectionsData.length, isPrivate: sectionPrivateCheckbox.checked
-            });
+            await addDoc(collection(db, `/artifacts/${appId}/public/data/sections_config`), data);
             sectionModal.classList.remove('show');
           } catch (err) { console.error('Error adding section:', err); alert('فشل في إضافة القسم.'); }
       }
-      
+
       // Reset modal after submit
       sectionModal.dataset.editingId = '';
       sectionForm.reset();
@@ -1198,18 +1433,30 @@
       document.getElementById('section-modal-submit').textContent = 'إضافة القسم';
     });
 
-    // فتح/إغلاق المودالات
-    linkModal.addEventListener('click', (e) => { if (e.target === linkModal || e.target.closest('#modal-cancel')) { linkModal.classList.remove('show'); linkForm.reset(); } });
-    addSectionBtn.addEventListener('click', () => {
-        // Reset state just in case
+    function openSectionModal(isUserSection = false) {
         sectionModal.dataset.editingId = '';
         sectionForm.reset();
-        document.getElementById('section-modal-title').textContent = 'إضافة قسم جديد';
-        document.getElementById('section-modal-submit').textContent = 'إضافة القسم';
-        
+
+        if (isUserSection) {
+            document.getElementById('section-modal-title').textContent = 'إنشاء قسمي الخاص';
+            document.getElementById('section-modal-submit').textContent = 'إنشاء القسم';
+            sectionPrivateLabel.textContent = "اجعل هذا القسم خاصًا (مرئي لك وللمدير فقط)";
+            sectionPrivateCheckbox.checked = true; // Default to private
+        } else {
+            document.getElementById('section-modal-title').textContent = 'إضافة قسم جديد';
+            document.getElementById('section-modal-submit').textContent = 'إضافة القسم';
+            sectionPrivateLabel.textContent = "اجعل هذا القسم خاصًا (مرئي للمسؤولين فقط)";
+        }
+
         sectionModal.classList.add('show');
-    });
-    sectionModal.addEventListener('click', (e) => { 
+    }
+
+    // فتح/إغلاق المودالات
+    linkModal.addEventListener('click', (e) => { if (e.target === linkModal || e.target.closest('#modal-cancel')) { linkModal.classList.remove('show'); linkForm.reset(); } });
+    addSectionBtn.addEventListener('click', () => openSectionModal(false));
+    createUserSectionBtn.addEventListener('click', () => openSectionModal(true));
+
+    sectionModal.addEventListener('click', (e) => {
         if (e.target === sectionModal || e.target.closest('#section-modal-cancel')) {
             sectionModal.classList.remove('show');
             // Reset state
@@ -1217,7 +1464,8 @@
             sectionForm.reset();
             document.getElementById('section-modal-title').textContent = 'إضافة قسم جديد';
             document.getElementById('section-modal-submit').textContent = 'إضافة القسم';
-        } 
+            sectionPrivateLabel.textContent = "اجعل هذا القسم خاصًا (مرئي للمسؤولين فقط)";
+        }
     });
 
     adminPanelBtn.addEventListener('click', async () => {
@@ -1228,7 +1476,7 @@
         adminModal.classList.add('show');
       } catch (e) { console.error('Error opening admin panel:', e); alert('حدث خطأ أثناء فتح لوحة التحكم.'); }
     });
-    
+
     // Logic for adding and removing admins + closing the modal
     addAdminForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -1270,7 +1518,7 @@
                 }
             }
         }
-        
+
         if (e.target === adminModal || e.target.closest('#admin-modal-close')) {
             adminModal.classList.remove('show');
         }
@@ -1287,7 +1535,7 @@
         if (loadingSpinner) loadingSpinner.style.display = 'none';
       }
     })();
-    
+
     // Name Prompt Logic
     namePromptForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -1298,7 +1546,7 @@
             updateUserInfoDisplay();
         }
     });
-    
+
     document.getElementById('user-info').addEventListener('click', (e) => {
         if (e.target.id === 'edit-name-btn') {
             const currentName = localStorage.getItem('userName') || '';
@@ -1333,7 +1581,7 @@
         adminLoginError.classList.remove('hidden');
       }
     });
-    
+
     // ================= NEW: Requests Logic =================
     function setupRequestsListener() {
         if (!userRoles.isSuperAdmin) return;
@@ -1376,7 +1624,7 @@
             requestsModal.classList.remove('show');
         }
     });
-    
+
     requestsList.addEventListener('click', async (e) => {
         if (!userRoles.isSuperAdmin) return;
         const approveBtn = e.target.closest('.approve-request-btn');
@@ -1416,7 +1664,7 @@
     });
 
     // ================= NEW: Chat Logic =================
-    
+
     chatFab.addEventListener('click', () => {
         if (userRoles.isSuperAdmin) {
             adminChatListModal.classList.add('show');
@@ -1428,7 +1676,7 @@
     function openChatForUser(userId) {
         if (currentChatUnsubscribe) currentChatUnsubscribe();
         currentChatUserId = userId;
-        
+
         chatWithTitle.textContent = userRoles.isSuperAdmin ? `الدردشة مع المستخدم...` : 'الدردشة مع المدير';
         chatModal.classList.add('show');
 
@@ -1440,17 +1688,17 @@
             if (!isInitialChatLoad && docs.length > 0) {
                 const lastMessage = docs[docs.length - 1].data();
                 const isMyMessage = userRoles.isSuperAdmin ? lastMessage.senderId === 'admin' : lastMessage.senderId === currentUser.uid;
-                
+
                 if (!isMyMessage) {
                     playNotificationSound();
                 }
             }
-            
+
             renderChatMessages(docs);
             isInitialChatLoad = false;
         });
     }
-    
+
     function renderChatMessages(docs) {
         chatMessages.innerHTML = '';
         docs.forEach(doc => {
@@ -1481,9 +1729,9 @@
         e.preventDefault();
         const text = chatInput.value.trim();
         if (!text) return;
-        
+
         const recipientId = userRoles.isSuperAdmin ? currentChatUserId : currentUser.uid;
-        
+
         try {
             const senderId = userRoles.isSuperAdmin ? 'admin' : currentUser.uid;
             const userName = localStorage.getItem('userName') || 'مجهول';
@@ -1494,7 +1742,7 @@
                 type: 'text',
                 timestamp: serverTimestamp()
             });
-            await setDoc(doc(db, `/artifacts/${appId}/public/data/chats`, recipientId), { 
+            await setDoc(doc(db, `/artifacts/${appId}/public/data/chats`, recipientId), {
                 lastActivity: serverTimestamp(),
                 lastMessageSender: senderId,
                 lastMessageText: text,
@@ -1505,13 +1753,13 @@
             console.error("Error sending message:", err);
         }
     });
-    
+
     function setupAdminChatListListener() {
         if (!userRoles.isSuperAdmin) return;
-        
+
         let isInitialChatList = true;
         const q = query(collection(db, `/artifacts/${appId}/public/data/chats`), orderBy('lastActivity', 'desc'));
-        
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             if (isInitialChatList) {
                 isInitialChatList = false;
@@ -1534,7 +1782,7 @@
         });
         mainUnsubscribes.push(unsubscribe);
     }
-    
+
     async function deleteChatForUser(userId) {
         if (!confirm(`هل أنت متأكد من حذف محادثة المستخدم ${userId}؟ لا يمكن التراجع عن هذا الإجراء.`)) {
             return;
@@ -1561,7 +1809,7 @@
         }
     }
 
-    
+
     function renderAdminChatList(docs) {
         if (docs.length === 0) {
             adminChatList.innerHTML = `<p class="text-gray-500 text-center p-4">لا توجد محادثات نشطة.</p>`;
@@ -1596,17 +1844,17 @@
             deleteChatForUser(userId);
         }
     });
-    
+
     chatModal.querySelector('#chat-modal-close').addEventListener('click', () => {
         chatModal.classList.remove('show');
         if (currentChatUnsubscribe) currentChatUnsubscribe();
         currentChatUserId = null;
     });
-    
+
     adminChatListModal.querySelector('#admin-chat-list-modal-close').addEventListener('click', () => {
         adminChatListModal.classList.remove('show');
     });
-    
+
     // Emoji Panel Logic
     const emojis = ['😀', '😂', '😍', '🤔', '👍', '👎', '❤️', '👋', '🎉', '😢', '🙏', '🔥', '💯', '✅', '❌', '❓'];
     emojis.forEach(emoji => {
@@ -1628,13 +1876,13 @@
             chatInput.focus();
         }
     });
-    
+
     document.addEventListener('click', (e) => {
         if (chatModal.classList.contains('show') && !emojiBtn.contains(e.target) && !emojiPanel.contains(e.target)) {
             emojiPanel.classList.add('hidden');
         }
     });
-    
+
     // Audio Recording Logic
     async function startRecording() {
         try {
@@ -1654,7 +1902,7 @@
                 const audioFile = new File([audioBlob], `rec_${Date.now()}.webm`, { type: 'audio/webm' });
                 const recipientId = userRoles.isSuperAdmin ? currentChatUserId : currentUser.uid;
                 const storageRef = ref(storage, `uploads/chat_audio/${recipientId}/${audioFile.name}`);
-                
+
                 try {
                     const snapshot = await uploadBytes(storageRef, audioFile);
                     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -1692,7 +1940,7 @@
                 type: type,
                 timestamp: serverTimestamp()
             });
-            await setDoc(doc(db, `/artifacts/${appId}/public/data/chats`, recipientId), { 
+            await setDoc(doc(db, `/artifacts/${appId}/public/data/chats`, recipientId), {
                 lastActivity: serverTimestamp(),
                 lastMessageSender: senderId,
                 lastMessageText: 'رسالة صوتية',
@@ -1710,6 +1958,70 @@
             stopRecording();
         }
     });
+
+    // ================= NEW: Site Settings Logic =================
+
+    function updateSiteSettingsModalToggles() {
+        // ---- إضافة console.log هنا ----
+        console.log("Updating toggles based on local state:", siteSettings);
+        toggleChat.checked = siteSettings.allowChat;
+        togglePrinting.checked = siteSettings.allowPrinting;
+        toggleSharing.checked = siteSettings.allowSharing;
+        toggleEditing.checked = siteSettings.allowEditing;
+        toggleUserSections.checked = siteSettings.allowUserSections;
+    }
+
+    async function handleSettingToggle(e) {
+        if (!userRoles.isSuperAdmin) return;
+
+        const settingKey = e.target.id.split('-')[1]; // e.g., 'chat'
+        const keyMap = {
+            'chat': 'allowChat',
+            'printing': 'allowPrinting',
+            'sharing': 'allowSharing',
+            'editing': 'allowEditing',
+            'usersections': 'allowUserSections' // Correct key: usersections
+        };
+        const docKey = keyMap[settingKey];
+        if (!docKey) {
+            console.error("Unknown setting key:", settingKey); // Add error log
+            return;
+        }
+
+        const newValue = e.target.checked;
+        const settingsRef = doc(db, `/artifacts/${appId}/public/data/config/site_settings`);
+
+        console.log(`Attempting to update setting: ${docKey} to ${newValue}`); // Log attempt
+
+        try {
+            await setDoc(settingsRef, { [docKey]: newValue }, { merge: true });
+            console.log(`Successfully updated Firestore for ${docKey}`); // Log success
+            // لا حاجة لتحديث الحالة المحلية يدويًا هنا، المستمع سيتولى الأمر.
+        } catch (err) {
+            console.error("Error updating setting:", err);
+            alert("خطأ في حفظ الإعداد.");
+            // Revert checkbox on failure
+            e.target.checked = !newValue;
+        }
+    }
+
+
+    siteSettingsBtn.addEventListener('click', () => {
+        updateSiteSettingsModalToggles(); // تأكد من تحديث الواجهة قبل العرض
+        siteSettingsModal.classList.add('show');
+    });
+
+    siteSettingsModal.addEventListener('click', (e) => {
+        if (e.target.id === 'site-settings-close' || e.target === siteSettingsModal) {
+            siteSettingsModal.classList.remove('show');
+        }
+    });
+
+    toggleChat.addEventListener('change', handleSettingToggle);
+    togglePrinting.addEventListener('change', handleSettingToggle);
+    toggleSharing.addEventListener('change', handleSettingToggle);
+    toggleEditing.addEventListener('change', handleSettingToggle);
+    toggleUserSections.addEventListener('change', handleSettingToggle);
 
 
 
@@ -1762,11 +2074,16 @@
       container.appendChild(hr);
     }
 
+    // ==== تعديل لإصلاح الطباعة (1): تم تعديل الدالة ====
     function buildSectionTable(container, sectionTitle, reports) {
+      // 1. إنشاء غلاف لكل قسم (العنوان + الجدول)
+      const wrapper = document.createElement('div');
+      wrapper.className = 'section-print-block'; // استخدام الكلاس الموجود في CSS
+
       const title = document.createElement('div');
       title.className = 'section-title-print';
       title.textContent = sectionTitle || 'قسم';
-      container.appendChild(title);
+      wrapper.appendChild(title); // 2. إضافة العنوان للغلاف
 
       const table = document.createElement('table');
       table.className = 'table';
@@ -1782,7 +2099,9 @@
         tbody.appendChild(empty);
       }
       table.appendChild(tbody);
-      container.appendChild(table);
+      wrapper.appendChild(table); // 3. إضافة الجدول للغلاف
+
+      container.appendChild(wrapper); // 4. إضافة الغلاف بالكامل للحاوية الرئيسية
     }
 
     function buildFooterImageDataUrl(isHealthGuide, pxWidth = 2480, pxHeight = 90) {
@@ -1821,12 +2140,12 @@
       rows.sort((a, b) => ((a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0)));
       return rows;
     }
-    
+
     async function shareSection(sectionTitle, collectionName) {
         try {
             const reports = await fetchSectionReports(collectionName);
             let shareText = `*${sectionTitle}*\n\n`;
-            
+
             if (reports.length === 0) {
                 shareText += "لا توجد عناصر في هذا القسم حاليًا.";
             } else {
@@ -1834,7 +2153,7 @@
                     shareText += `${report.title}:\n${report.url}\n\n`;
                 });
             }
-            
+
             const encodedText = encodeURIComponent(shareText);
             const whatsappUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
             window.open(whatsappUrl, '_blank');
@@ -1870,8 +2189,9 @@
           }
         }
 
-        await new Promise(r => setTimeout(r, 120)); // Keep for QR code rendering
-        
+        // ==== تعديل لإصلاح الطباعة (2): زيادة وقت الانتظار ====
+        await new Promise(r => setTimeout(r, 500)); // زيادة الوقت لضمان رسم أكواد QR
+
         const canvas = await html2canvas(printRoot, { scale: 2 });
         const imgData = canvas.toDataURL('image/png');
 
@@ -1995,7 +2315,7 @@
         }
     }
     recalculateStorageBtn.addEventListener('click', recalculateTotalStorage);
-    
+
     function setupStorageUsageListener() {
         if (!userRoles.isSuperAdmin) {
             storageUsageEl.style.display = 'none';
@@ -2005,7 +2325,7 @@
         recalculateStorageBtn.classList.remove('hidden');
 
         const storageInfoRef = doc(db, `/artifacts/${appId}/public/data/config/storage_info`);
-        
+
         onSnapshot(storageInfoRef, (docSnap) => {
             if (docSnap.exists()) {
                 const usedBytes = docSnap.data().totalSize || 0;
