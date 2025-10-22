@@ -33,12 +33,6 @@
       justify-content: flex-end;
       gap: 4px;
   }
-  /* ---- تعديل: ضمان أن الأزرار يمكنها الانكماش ---- */
-  .header-buttons > * {
-      min-width: 0;
-  }
-  /* ---- نهاية التعديل ---- */
-
 
   h1 {
     font-size: 1.1rem;
@@ -186,9 +180,9 @@
 
     /* ======== 🔒 منع التمدد الأفقي بالكامل للجوال وجميع الأجهزة ======== */
     html, body {
-      width: 100%;
-      max-width: 100%; /* تغيير من !important */
-      overflow-x: hidden !important; /* الإبقاء على !important هنا ضروري */
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: hidden !important;
     }
     *, *::before, *::after {
       box-sizing: border-box;
@@ -197,24 +191,13 @@
       max-width: 100%;
       height: auto;
     }
-    /* تمت إزالة !important من max-width هنا للسماح للعناصر الداخلية بالتحكم */
     .container, main, header, footer, section, div {
-      max-width: 100%;
-      overflow-x: hidden !important; /* الإبقاء على !important هنا ضروري */
+      max-width: 100% !important;
+      overflow-x: hidden !important;
     }
     /* إصلاح داخل عناصر flex حتى لا تتمدد الروابط وتسبب سكرول أفقي */
     .link-item .flex { min-width: 0; }
     .link-item a { min-width: 0; }
-
-    /* ---- تعديل: كسر الكلمات الطويلة (مثل IDs) ---- */
-    #super-admin-id,
-    #admin-list .font-mono,
-    #admin-chat-list .font-mono {
-        overflow-wrap: break-word;
-        word-break: break-all; /* For stricter breaking */
-    }
-    /* ---- نهاية التعديل ---- */
-
   </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -1053,46 +1036,18 @@
         // 1. Site Settings Listener
         const settingsRef = doc(db, `/artifacts/${appId}/public/data/config/site_settings`);
         const settingsUnsubscribe = onSnapshot(settingsRef, (docSnap) => {
-            console.log("Site settings snapshot received."); // Log snapshot received
             if (docSnap.exists()) {
-                console.log("Settings doc exists. Data:", docSnap.data()); // Log existing data
-                // Ensure we merge correctly, handling potential undefined values from Firestore
-                const firestoreData = docSnap.data();
-                siteSettings = {
-                    allowChat: firestoreData.allowChat ?? true, // Provide defaults
-                    allowPrinting: firestoreData.allowPrinting ?? true,
-                    allowSharing: firestoreData.allowSharing ?? true,
-                    allowEditing: firestoreData.allowEditing ?? true,
-                    allowUserSections: firestoreData.allowUserSections ?? false, // Default to false
-                };
-                console.log("Updated local siteSettings:", siteSettings); // Log updated local state
+                siteSettings = { ...siteSettings, ...docSnap.data() };
             } else {
-                console.log("Settings doc does not exist."); // Log non-existence
-                // If settings doc doesn't exist, reset to defaults locally
-                // and create it with defaults (only if super admin)
-                siteSettings = {
-                    allowChat: true,
-                    allowPrinting: true,
-                    allowSharing: true,
-                    allowEditing: true,
-                    allowUserSections: false // Ensure default is used
-                };
+                // If settings doc doesn't exist, create it with defaults (only if super admin)
                 if(userRoles.isSuperAdmin) {
-                    console.log("Creating default settings in Firestore..."); // Log creation attempt
-                    setDoc(settingsRef, siteSettings)
-                        .then(() => console.log("Default settings created.")) // Log creation success
-                        .catch(e => console.error("Error setting default settings:", e));
+                    setDoc(settingsRef, siteSettings).catch(e => console.error("Error setting default settings:", e));
                 }
             }
-            // Always update UI after processing snapshot
-            console.log("Calling UI updates from settings listener...");
             updateUiForSiteSettings();
             updateSiteSettingsModalToggles();
-        }, (error) => { // Add error handler for the listener itself
-            console.error("Error in site settings listener:", error);
         });
         mainUnsubscribes.push(settingsUnsubscribe);
-
 
         // 2. Admin Roles Listener
         const adminRef = doc(db, `/artifacts/${appId}/public/data/config/admin_doc`);
@@ -1962,8 +1917,6 @@
     // ================= NEW: Site Settings Logic =================
 
     function updateSiteSettingsModalToggles() {
-        // ---- إضافة console.log هنا ----
-        console.log("Updating toggles based on local state:", siteSettings);
         toggleChat.checked = siteSettings.allowChat;
         togglePrinting.checked = siteSettings.allowPrinting;
         toggleSharing.checked = siteSettings.allowSharing;
@@ -1980,23 +1933,16 @@
             'printing': 'allowPrinting',
             'sharing': 'allowSharing',
             'editing': 'allowEditing',
-            'usersections': 'allowUserSections' // Correct key: usersections
+            'usersections': 'allowUserSections'
         };
         const docKey = keyMap[settingKey];
-        if (!docKey) {
-            console.error("Unknown setting key:", settingKey); // Add error log
-            return;
-        }
+        if (!docKey) return;
 
         const newValue = e.target.checked;
         const settingsRef = doc(db, `/artifacts/${appId}/public/data/config/site_settings`);
 
-        console.log(`Attempting to update setting: ${docKey} to ${newValue}`); // Log attempt
-
         try {
             await setDoc(settingsRef, { [docKey]: newValue }, { merge: true });
-            console.log(`Successfully updated Firestore for ${docKey}`); // Log success
-            // لا حاجة لتحديث الحالة المحلية يدويًا هنا، المستمع سيتولى الأمر.
         } catch (err) {
             console.error("Error updating setting:", err);
             alert("خطأ في حفظ الإعداد.");
@@ -2005,9 +1951,8 @@
         }
     }
 
-
     siteSettingsBtn.addEventListener('click', () => {
-        updateSiteSettingsModalToggles(); // تأكد من تحديث الواجهة قبل العرض
+        updateSiteSettingsModalToggles();
         siteSettingsModal.classList.add('show');
     });
 
