@@ -93,10 +93,12 @@
     .print-header {
       display: grid;
       grid-template-columns: 1fr 2fr 1fr;
-      align-items: center; gap: 16px; margin-bottom: 16px;
+      align-items: center; gap: 16px; 
+      padding-bottom: 10px; /* أضفنا مساحة سفلية للترويسة */
+      /* margin-bottom: 16px;  أزلنا الهامش السفلي من هنا */
     }
     .header-logo { width: 110px; height: 60px; display:flex; align-items:center; justify-content:center; }
-    .header-center p { margin: 2px 0; }
+    .header-center p { margin: 4px 0; line-height: 1.7; } /* زدنا ارتفاع السطر */
 
     .table { width: 100%; border-collapse: collapse; margin-top: 8px; }
     .table th, .table td { border: 1px solid #e5e7eb; padding: 8px; vertical-align: middle; }
@@ -1673,7 +1675,8 @@
       container.appendChild(header);
 
       const hr = document.createElement('hr');
-      hr.style.margin = '6px 0 10px'; hr.style.borderColor = '#d1d5db';
+      hr.style.margin = '0 0 12px'; /* أزلنا الهامش العلوي ليلتصق بالترويسة */
+      hr.style.borderColor = '#d1d5db';
       container.appendChild(hr);
     }
 
@@ -1914,4 +1917,5 @@
   </script>
 </body>
 </html>
+
 
