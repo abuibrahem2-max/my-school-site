@@ -4,20 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>منصة مدرسة الراشدون</title>
-    <!-- تحميل Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- تحميل خط "Cairo" من Google Fonts لمظهر عربي أفضل -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
 
-    <!-- مكتبات لإنشاء PDF و QR Code -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
-    <!-- (جديد) تحميل Tone.js للإشعارات الصوتية للدردشة -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    
+    <script>
+        function replaceEmojis(text) {
+             const emojiMap = {
+                ':)': '😊', ':D': '😁', ':(': '😞', ';)': '😉', 
+                ':|': '😐', ':o': '😮', '<3': '❤️', '8)': '😎'
+             };
+             let replacedText = text;
+             for (const key in emojiMap) {
+                const safeKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const regex = new RegExp(safeKey, 'g');
+                replacedText = replacedText.replace(regex, emojiMap[key]);
+             }
+             return replacedText;
+        }
+    </script>
 
     <style>
         /* تطبيق خط "Cairo" على كامل الصفحة */
@@ -33,7 +45,7 @@
             border-radius: 3px;
         }
 
-        /* (جديد) أنماط شارة الإشعارات */
+        /* أنماط شارة الإشعارات */
         .notification-badge {
             position: absolute;
             top: -8px;
@@ -49,7 +61,37 @@
             justify-content: center;
             min-width: 1.25rem; /* 20px */
             height: 1.25rem; /* 20px */
+            z-index: 10;
         }
+        
+        /* شارة الدردشة العائمة */
+        #chat-total-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            transform: translate(50%, -50%);
+            background-color: red;
+            color: white;
+            border-radius: 50%;
+            padding: 0.1em 0.5em;
+            font-size: 0.85rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.75rem;
+            height: 1.75rem;
+            box-shadow: 0 0 0 3px #f3f4f6; /* gray-100 */
+        }
+        
+        /* (جديد) تمييز عنوان "محادثات خاصة" */
+        .private-chat-header {
+            font-weight: bold;
+            color: #008080; /* Teal - لون مميز */
+            padding: 10px 0;
+            border-bottom: 2px solid #008080;
+        }
+
 
         /* أنماط خاصة بالطباعة (لإنشاء PDF) */
         .print-container {
@@ -103,7 +145,6 @@
             border: 1px solid #ddd;
             border-radius: 8px;
             overflow: hidden;
-            /* (إزالة page-break-inside) */
         }
         .print-section-title {
             font-size: 22px;
@@ -111,7 +152,6 @@
             padding: 15px;
             background-color: #f4f4f4;
             border-bottom: 1px solid #ddd;
-            /* (إزالة page-break-after) */
         }
         .print-item-list {
             padding: 15px;
@@ -122,7 +162,6 @@
             align-items: center;
             padding: 12px 0;
             border-bottom: 1px solid #eee;
-            /* (إزالة page-break-inside) */
         }
         .print-item:last-child {
             border-bottom: none;
@@ -154,20 +193,19 @@
         }
     </style>
 
-    <!-- ####################    Firebase SDK    #################### -->
     <script type="module">
-        // استيراد مكتبات Firebase (المنصة + الدردشة)
+        // استيراد مكتبات Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, doc, collection, addDoc, onSnapshot, query, 
             updateDoc, arrayUnion, getDoc, setDoc, deleteDoc, getDocs, 
-            where, serverTimestamp, arrayRemove, orderBy, limit, setLogLevel
+            where, serverTimestamp, arrayRemove, orderBy, limit, writeBatch
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- 1. إعدادات Firebase (من المنصة) ---
-
-        // (هام) تم لصق إعدادات Firebase الخاصة بك هنا
+        // --- 1. إعدادات Firebase ---
+        
+        // (هام) يجب تغيير مفتاح API الخاص بك إذا كان هذا الكود سيُستخدم فعلياً
         const firebaseConfig = {
           apiKey: "AIzaSyCAabU3qzh2wmWmA8v95oabloap1PNyHwI",
           authDomain: "jaded-3ef9d.firebaseapp.com",
@@ -177,7 +215,13 @@
           appId: "1:240292137665:web:02597426d8288ca0c16240"
         };
         
-        // (جديد) معرف التطبيق الثابت للدردشة (من المنصة)
+        // --- بيانات المدير الثابتة (يجب تغييرها) ---
+        const ADMIN_USERNAME = "مدير"; // غيّر هذا الاسم
+        const ADMIN_PASSWORD = "مدرستنا"; // غيّر كلمة المرور هذه
+        const ADMIN_ROLE = "admin";
+        const ADMIN_SIGNATURE = "rashedon_admin_key"; // توقيع يُحفظ في localStorage
+        // ------------------------------
+        
         const CHAT_APP_ID = 'rashedon-app';
 
         // خدمات Firebase
@@ -185,9 +229,11 @@
         let sectionsCollectionRef;
         let usersCollectionRef;
         let permissionRequestsCollectionRef;
-        const sectionsPath = `artifacts/rashedon-app/public/data/sections`;
-        const usersPath = `artifacts/rashedon-app/public/data/users`;
-        const permissionRequestsPath = `artifacts/rashedon-app/public/data/permissionRequests`;
+        
+        // (تعديل) تبسيط جميع المسارات لضمان عملها بشكل موثوق
+        const sectionsPath = `sections`;
+        const usersPath = `users`; 
+        const permissionRequestsPath = `permissionRequests`;
 
         // متغيرات لحالة المستخدم (المنصة)
         let currentUserName = null; // اسم المستخدم (من تسجيل الدخول)
@@ -198,22 +244,22 @@
         let permissionRequestsUnsubscribe = null; 
 
         // --- (جديد) متغيرات الدردشة ---
-        let chatAllUsers = {}; // كل المستخدمين من usersPath
-        let chatAdminList = {}; // قائمة المستخدمين المديرين
+        let chatAllUsers = {}; 
+        let chatAdminList = {}; 
         let chatCurrentChat = { type: 'group', id: 'group' };
         let chatUnreadCounts = {};
         let chatMessageListeners = {};
         let chatSynth;
         let chatSoundReady = false;
         
-        // (جديد) مسارات الدردشة (تستخدم CHAT_APP_ID و usersPath)
+        // (تعديل) تبسيط مسارات الدردشة
         const chatPaths = {
-            usersCollection: () => collection(db, usersPath), // إعادة استخدام مسار مستخدمي المنصة
-            userDoc: (uid) => doc(db, usersPath, uid), // إعادة استخدام مسار مستندات المنصة
-            groupChatCollection: () => collection(db, `artifacts/${CHAT_APP_ID}/public/data/chat/group-chat`),
-            privateChatCollection: (chatId) => collection(db, `artifacts/${CHAT_APP_ID}/public/data/chat/private-chats/${chatId}`, 'messages'),
-            userChatStateCollection: (uid) => collection(db, `artifacts/${CHAT_APP_ID}/users/${uid}/chat-state`), // خاص بالمستخدم
-            userChatStateDoc: (uid, chatId) => doc(db, `artifacts/${CHAT_APP_ID}/users/${uid}/chat-state`, chatId),
+            usersCollection: () => collection(db, usersPath), 
+            userDoc: (uid) => doc(db, usersPath, uid), 
+            groupChatCollection: () => collection(db, `chat_group`),
+            privateChatCollection: (chatId) => collection(db, `chat_private/${chatId}`, 'messages'),
+            userChatStateCollection: (uid) => collection(db, `chat_state/${uid}/state`), 
+            userChatStateDoc: (uid, chatId) => doc(db, `chat_state/${uid}/state`, chatId),
         };
         // --- نهاية متغيرات الدردشة ---
 
@@ -225,6 +271,7 @@
         
         // نوافذ (المنصة)
         let loginModal, loginForm, loginError;
+        let userPasswordInput; // حقل كلمة المرور الجديد
         let addSectionModal, addSectionModalContent, addSectionForm, closeSectionModalBtn, cancelSectionModalBtn;
         let addItemModal, modalContent, closeModalBtn, cancelModalBtn, addItemForm, columnIdInput, itemTypeInput;
         let editSectionModal, editSectionForm, editSectionTitleInput, editSectionIdInput;
@@ -234,6 +281,11 @@
         let adminManageModal, adminUsersList;
         let adminPermsModal, adminPermsList;
         let currentEditorsList, currentEditorsContainer; 
+        
+        // (جديد) أزرار تسجيل الدخول/الخروج
+        let logoutBtn, loginAdminBtn;
+        let chatTotalBadge; // شارة الدردشة العائمة
+        let deleteAllChatBtn; // زر حذف جميع الدردشات
 
         // (جديد) عناصر نافذة الدردشة
         let chatWindow, chatListView, chatMessageView, chatBackBtn, closeChatBtn1, closeChatBtn2;
@@ -258,59 +310,102 @@
             userAvatar = document.getElementById('user-avatar');
             pdfSpinnerModal = document.getElementById('pdf-spinner-modal');
             permsBtnBadge = document.getElementById('admin-perms-badge'); 
+            
+            // (جديد) عناصر أزرار تسجيل الدخول/الخروج
+            logoutBtn = document.getElementById('logout-btn');
+            loginAdminBtn = document.getElementById('login-admin-btn');
+            chatTotalBadge = document.getElementById('chat-total-badge'); // شارة الدردشة الكلية
+            deleteAllChatBtn = document.getElementById('delete-all-chat-btn'); // زر حذف جميع الدردشات
 
             // تهيئة نافذة تسجيل الدخول (المنصة)
             loginModal = document.getElementById('login-modal');
             loginForm = document.getElementById('login-form');
             loginError = document.getElementById('login-error');
+            userPasswordInput = document.getElementById('user-password-input'); // عنصر كلمة المرور
 
-            // التحقق من وجود الإعدادات
-            if (!firebaseConfig || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("AIzaSyC")) {
-                 // (ملاحظة: تم تغيير الشرط ليتناسب مع المفتاح الحقيقي)
-                 console.log("إعدادات Firebase موجودة.");
-            }
-
-            // محاولة التحقق من الاسم المسجل
+            // محاولة التحقق من الاسم المسجل أو توقيع المدير
             currentUserName = localStorage.getItem('rashedonUserName');
+            isUserAdmin = localStorage.getItem(ADMIN_SIGNATURE) === 'true'; // التحقق من توقيع المدير
 
-            if (currentUserName) {
-                // إذا كان الاسم موجوداً، قم بتهيئة Firebase وابدأ التطبيق
-                console.log("الاسم موجود:", currentUserName);
+            if (currentUserName || isUserAdmin) {
+                // إذا كان الاسم موجوداً أو المدير مسجلاً، قم بتهيئة Firebase وابدأ التطبيق
+                console.log("الاسم أو توقيع المدير موجود.");
                 initFirebase();
             } else {
-                // إذا لم يكن الاسم موجوداً، أظهر نافذة تسجيل الدخول
+                // إذا لم يكن الاسم أو التوقيع موجوداً، أظهر نافذة تسجيل الدخول
                 console.log("الاسم غير موجود، إظهار نافذة الدخول.");
                 if (loginModal) loginModal.classList.remove('hidden'); 
             }
 
             // ربط حدث إرسال نموذج تسجيل الدخول
             if (loginForm) loginForm.addEventListener('submit', handleLoginSubmit);
+            
+            // ربط زر تسجيل دخول المدير لإظهار النافذة
+            if (loginAdminBtn) {
+                 loginAdminBtn.addEventListener('click', () => {
+                    // مسح حقل كلمة المرور فقط لتسهيل دخول المشاهد
+                    if (userPasswordInput) userPasswordInput.value = '';
+                    if (loginError) loginError.classList.add('hidden');
+                    if (loginModal) loginModal.classList.remove('hidden');
+                 });
+            }
         });
 
         /**
-         * معالجة إرسال نموذج تسجيل الدخول (بالاسم)
+         * معالجة إرسال نموذج تسجيل الدخول (بالاسم وكلمة المرور المميزة)
          */
         async function handleLoginSubmit(e) {
             e.preventDefault();
             const nameInput = document.getElementById('user-name-input');
-            if (!nameInput) return;
+            const passwordInput = document.getElementById('user-password-input');
+            if (!nameInput || !passwordInput) return;
+            
             const name = nameInput.value.trim();
+            const password = passwordInput.value.trim();
 
             if (!name) {
                 showLoginError("الرجاء إدخال اسمك للمتابعة.");
                 return;
             }
-
-            localStorage.setItem('rashedonUserName', name);
-            currentUserName = name;
-            console.log("تم حفظ الاسم:", name);
-
-            if (loginError) loginError.classList.add('hidden');
-            if (loginModal) loginModal.classList.add('hidden');
-
-            // تهيئة Firebase والبدء
-            await initFirebase();
+            
+            // 1. منطق المدير المميز
+            if (name === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+                currentUserRole = ADMIN_ROLE;
+                isUserAdmin = true;
+                localStorage.setItem(ADMIN_SIGNATURE, 'true'); // حفظ توقيع المدير
+                localStorage.setItem('rashedonUserName', name);
+                
+                if (loginError) loginError.classList.add('hidden');
+                if (loginModal) loginModal.classList.add('hidden');
+                
+                // إعادة تهيئة/تحديث الحالة عبر تسجيل دخول مجهول جديد
+                await initFirebase(true); 
+                showAlert("تم تسجيل الدخول كمدير بنجاح.", 'success');
+                return;
+            } 
+            
+            // 2. منطق المشاهد العادي (أو فشل المدير)
+            else if (password) {
+                 // فشل في تسجيل دخول المدير
+                 showLoginError("اسم المستخدم أو كلمة المرور الخاصة بالمدير غير صحيحة.");
+                 return;
+            } else {
+                 // تسجيل دخول المشاهد
+                 currentUserRole = 'viewer';
+                 isUserAdmin = false;
+                 localStorage.removeItem(ADMIN_SIGNATURE);
+                 localStorage.setItem('rashedonUserName', name);
+                 
+                 if (loginError) loginError.classList.add('hidden');
+                 if (loginModal) loginModal.classList.add('hidden');
+                 
+                 // إعادة تهيئة/تحديث الحالة عبر تسجيل دخول مجهول جديد
+                 await initFirebase(true);
+                 showAlert(`تم تسجيل الدخول كـ مشاهد باسم: ${name}`, 'info');
+                 return;
+            }
         }
+
 
         /**
          * إظهار رسالة خطأ في نافذة تسجيل الدخول
@@ -326,64 +421,91 @@
 
         /**
          * تهيئة Firebase وتسجيل الدخول (المجهول)
+         * @param {boolean} forceReload - لإجبار إعادة التحميل بعد تسجيل الدخول اليدوي
          */
-        async function initFirebase() {
+        async function initFirebase(forceReload = false) {
             try {
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
-                auth = getAuth(app);
-                setLogLevel('error'); // (جديد) تقليل سجلات Firebase
+                if (!app) {
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    // setLogLevel('error'); // يمكنك تفعيل هذا لتقليل سجلات Firebase في الإنتاج
+                }
 
                 // تحديد مراجع المجموعات
                 sectionsCollectionRef = collection(db, sectionsPath);
                 usersCollectionRef = collection(db, usersPath);
                 permissionRequestsCollectionRef = collection(db, permissionRequestsPath);
 
-                // مراقبة حالة تسجيل الدخول
+                // ===============================================
+                // (جديد) منطق التحقق الفوري والتشغيل السريع
+                // ===============================================
+                
+                // تحديد الحالة المحلية
+                const localAdminStatus = localStorage.getItem(ADMIN_SIGNATURE) === 'true';
+                const localUserName = localStorage.getItem('rashedonUserName');
+
+                // 1. إذا كان توقيع المدير أو الاسم موجوداً محلياً (لتشغيل الواجهة فوراً)
+                if (localAdminStatus || localUserName) {
+                    currentUserRole = localAdminStatus ? ADMIN_ROLE : 'viewer';
+                    currentUserName = localUserName || ADMIN_USERNAME;
+                    isUserAdmin = localAdminStatus;
+                    
+                    // تشغيل منطق الواجهة فوراً إذا كان الاسم موجوداً محليا
+                    if (localUserName) {
+                       initializeAppLogic(currentUserName);
+                    }
+                }
+                
+                // 2. معالجة حالة forceReload (بعد تسجيل دخول/خروج يدوي)
+                if (forceReload) {
+                     // تسجيل الخروج ثم الدخول كمجهول لبدء دورة Auth جديدة
+                     if (auth.currentUser) await signOut(auth);
+                     await signInAnonymously(auth);
+                     return;
+                }
+                
+                // ===============================================
+
+                // مراقبة حالة تسجيل الدخول (تبقى كآلية لضمان الـ UID وتحديث Firestore)
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
-                        console.log("المستخدم مسجل دخوله (Auth UID):", user.uid);
-                        userId = user.uid; // هذا هو معرف المصادقة
-
-                        // (تعديل) التأكد من أن currentUserName ليس فارغاً
-                        if (!currentUserName) {
-                            console.warn("Auth UID موجود ولكن currentUserName فارغ. إعادة تحميل...");
-                            localStorage.removeItem('rashedonUserName');
-                            window.location.reload();
+                        userId = user.uid; 
+                        
+                        // نستخدم الحالة المحلية التي تم تحديدها بالفعل في الخطوة 1
+                        const finalRole = localStorage.getItem(ADMIN_SIGNATURE) === 'true' ? ADMIN_ROLE : 'viewer';
+                        const finalName = localStorage.getItem('rashedonUserName') || 'مشاهد';
+                        
+                        // إذا كان المستخدم جديداً (لم يُدخل اسمه بعد)، نعرض النافذة
+                        if (!localStorage.getItem('rashedonUserName')) {
+                            if (loginModal) loginModal.classList.remove('hidden');
+                            updateUIForUser('جاري التحميل', false);
                             return;
                         }
-
-                        // (جديد) جلب مستند المستخدم من usersPath باستخدام Auth UID
-                        // هذا يتطلب أن يكون معرف المستند في usersPath هو Auth UID
-                        // لكن الكود الحالي يبحث بالاسم. سنقوم بتعديل checkAndAddUser
-                        // ليستخدم Auth UID كمعرف للمستند.
                         
-                        await checkAndAddUser(userId, currentUserName);
-                        await fetchUserRole(userId); // (تعديل) جلب الدور باستخدام Auth UID
-
-                        initializeAppLogic(currentUserName);
+                        // تحديث الاسم والدور في Firestore (مع الاحتفاظ بدور المدير إذا كان مسجلاً محلياً)
+                        await checkAndAddUser(userId, finalName, finalRole);
+                        
+                        // إعادة تشغيل logicApp للتأكد من تحديث الـ UID والمعلومات إذا لم يتم تشغيلها في الخطوة 1
+                        if (!document.getElementById('sections-container').hasChildNodes()) {
+                            initializeAppLogic(finalName);
+                        }
 
                         if (isUserAdmin) {
                             listenForPermissionRequests();
                         }
                         
-                        // (جديد) تحديث التواجد (من كود الدردشة)
                         updateUserPresence();
-                        setInterval(updateUserPresence, 60 * 1000); // كل دقيقة
 
                     } else {
-                        console.log("تسجيل دخول مستخدم مجهول جديد...");
-                        if (permissionRequestsUnsubscribe) {
-                           permissionRequestsUnsubscribe();
-                           permissionRequestsUnsubscribe = null;
+                        userId = '';
+                        // محاولة تسجيل الدخول كمجهول لبدء الدورة
+                        try {
+                             await signInAnonymously(auth);
+                        } catch (e) {
+                            console.error("فشل تسجيل الدخول المجهول:", e);
+                            if (loginModal) loginModal.classList.remove('hidden');
                         }
-                        // (تعديل) استخدام signInAnonymously كخيار افتراضي
-                        // (ملاحظة: إذا كان لديك نظام توكن مخصص، استخدمه هنا)
-                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(auth, __initial_auth_token);
-                         } else {
-                            await signInAnonymously(auth);
-                         }
                     }
                 });
             } catch (error) {
@@ -396,66 +518,21 @@
         }
 
         /**
-         * (تعديل) التحقق من وجود المستخدم باستخدام Auth UID كمعرف للمستند
+         * التحقق من وجود المستخدم وتحديث دوره (للمدير)
          */
-        async function checkAndAddUser(authUid, name) {
+        async function checkAndAddUser(authUid, name, role) {
             if (!authUid || !name || !usersCollectionRef) return;
-            try {
-                const userDocRef = doc(db, usersPath, authUid); // استخدام Auth UID كـ ID
-                const userDocSnap = await getDoc(userDocRef);
-
-                if (!userDocSnap.exists()) {
-                    // مستخدم جديد، قم بإنشاء المستند باستخدام Auth UID
-                    await setDoc(userDocRef, { 
-                        name: name, 
-                        role: 'viewer' 
-                    });
-                    console.log(`تمت إضافة المستخدم "${name}" (UID: ${authUid}) بدور 'viewer'.`);
-                    currentUserRole = 'viewer';
-                } else {
-                    // مستخدم موجود، ربما نقوم بتحديث الاسم إذا تغير؟
-                    // (اختياري)
-                     if (userDocSnap.data().name !== name) {
-                        await updateDoc(userDocRef, { name: name });
-                        console.log(`تم تحديث اسم المستخدم لـ UID: ${authUid} إلى "${name}".`);
-                     } else {
-                        console.log(`المستخدم "${name}" (UID: ${authUid}) موجود بالفعل.`);
-                     }
-                }
-            } catch (error) {
-                console.error("خطأ في التحقق أو إضافة المستخدم:", error);
-            }
-        }
-
-        /**
-         * (تعديل) جلب دور المستخدم الحالي من Firestore باستخدام Auth UID
-         */
-        async function fetchUserRole(authUid) {
-            if (!authUid || !usersCollectionRef) {
-                 currentUserRole = 'viewer';
-                 isUserAdmin = false;
-                 return;
-            }
-            console.log(`fetchUserRole: جاري البحث عن المستخدم بالـ UID: "${authUid}"`);
             try {
                 const userDocRef = doc(db, usersPath, authUid);
                 const userDocSnap = await getDoc(userDocRef);
                 
-                if (userDocSnap.exists()) {
-                    const userData = userDocSnap.data();
-                    currentUserRole = userData.role || 'viewer';
-                    console.log(`fetchUserRole: دور المستخدم المحدد لـ "${authUid}" هو: ${currentUserRole}`);
-                } else {
-                    console.warn(`fetchUserRole: لم يتم العثور على المستخدم "${authUid}" لجلب دوره. (ربما لم يكتمل checkAndAddUser؟)`);
-                    currentUserRole = 'viewer';
+                const updateData = { name: name, role: role };
+
+                if (!userDocSnap.exists() || userDocSnap.data().role !== role || userDocSnap.data().name !== name) {
+                    await setDoc(userDocRef, updateData, { merge: true });
                 }
-                isUserAdmin = (currentUserRole === 'admin');
-                console.log(`fetchUserRole: هل المستخدم "${currentUserName}" مدير؟: ${isUserAdmin}`);
             } catch (error) {
-                console.error("fetchUserRole: خطأ في جلب دور المستخدم:", error);
-                currentUserRole = 'viewer';
-                isUserAdmin = false;
-                 console.log(`fetchUserRole: هل المستخدم "${currentUserName}" مدير؟ (بعد الخطأ): ${isUserAdmin}`);
+                console.error("خطأ في التحقق أو إضافة المستخدم:", error);
             }
         }
 
@@ -464,11 +541,7 @@
          * بدء منطق التطبيق بعد تسجيل الدخول وتحديد الدور
          */
         function initializeAppLogic(userName) {
-             if (!userName) {
-                 console.error("initializeAppLogic: اسم المستخدم فارغ!");
-                 if (loginModal) loginModal.classList.remove('hidden');
-                 return;
-             }
+             if (!userName) return;
 
             updateUIForUser(userName, isUserAdmin);
 
@@ -481,9 +554,9 @@
             setupAdminManageModal();
             setupAdminPermsModal();
             
-            // (جديد) تهيئة نافذة الدردشة المدمجة
+            // تهيئة نافذة الدردشة المدمجة
             setupChatWindow(); 
-            // (جديد) بدء منطق الدردشة
+            // بدء منطق الدردشة
             initializeChatApp();
 
             setupControlEvents(isUserAdmin);
@@ -494,42 +567,41 @@
          * تحديث الواجهة
          */
         function updateUIForUser(name, isAdmin) {
-             console.log(`updateUIForUser: تحديث الواجهة للمستخدم "${name}", هل هو مدير؟ ${isAdmin}`);
              if (userNameDisplay) {
-                 userNameDisplay.textContent = `مرحباً بك، ${name} (${currentUserRole})`;
-                 console.log(`updateUIForUser: تم تحديث اسم المستخدم.`);
-             } else {
-                 console.warn(`updateUIForUser: عنصر userNameDisplay غير موجود.`);
-             }
+                 userNameDisplay.textContent = `مرحباً بك، ${name} (${isAdmin ? 'مدير' : 'مشاهد'})`;
+             } 
 
             adminControls.forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) {
                      const wrapper = btn.closest('.relative');
                      if (isAdmin) {
-                         console.log(`updateUIForUser: محاولة إظهار الزر ${id}`);
                          btn.classList.remove('hidden');
                          if (wrapper) wrapper.classList.remove('hidden');
                      } else {
-                         console.log(`updateUIForUser: محاولة إخفاء الزر ${id}`);
                          btn.classList.add('hidden');
                           if (wrapper) wrapper.classList.add('hidden');
                      }
-                } else {
-                     console.warn(`updateUIForUser: العنصر بالـ ID "${id}" غير موجود.`);
                 }
             });
 
             generalControls.forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) {
-                      console.log(`updateUIForUser: محاولة إظهار الزر العام ${id}`);
                        btn.classList.remove('hidden');
-                } else {
-                       console.warn(`updateUIForUser: العنصر بالـ ID "${id}" غير موجود.`);
                 }
             });
-             console.log(`updateUIForUser: اكتمل تحديث الواجهة.`);
+            
+            // إدارة أزرار تسجيل الدخول/الخروج
+            if (logoutBtn && loginAdminBtn) {
+                if (isAdmin) { 
+                    logoutBtn.classList.remove('hidden');
+                    loginAdminBtn.classList.add('hidden');
+                } else {
+                    logoutBtn.classList.add('hidden');
+                    loginAdminBtn.classList.remove('hidden'); 
+                }
+            }
         }
 
 
@@ -539,52 +611,46 @@
          * =============================================
          */
 
-        /**
-         * 1. نافذة إضافة قسم
-         */
         function setupAddSectionModal() {
-            addSectionModal = document.getElementById('add-section-modal');
-            if (!addSectionModal) return;
+             addSectionModal = document.getElementById('add-section-modal');
+             if (!addSectionModal) return;
 
-            addSectionModalContent = document.getElementById('add-section-modal-content');
-            addSectionForm = document.getElementById('add-section-form');
-            closeSectionModalBtn = document.getElementById('close-section-modal');
-            cancelSectionModalBtn = document.getElementById('cancel-section-modal');
-            const addSectionBtn = document.getElementById('add-section-btn');
+             addSectionModalContent = document.getElementById('add-section-modal-content');
+             addSectionForm = document.getElementById('add-section-form');
+             closeSectionModalBtn = document.getElementById('close-section-modal');
+             cancelSectionModalBtn = document.getElementById('cancel-section-modal');
+             const addSectionBtn = document.getElementById('add-section-btn');
 
-            if (addSectionBtn) {
-                addSectionBtn.addEventListener('click', () => {
-                    addSectionModal.classList.remove('hidden');
-                    setTimeout(() => {
-                        if (addSectionModalContent) {
-                            addSectionModalContent.classList.remove('scale-95', 'opacity-0');
-                            addSectionModalContent.classList.add('scale-100', 'opacity-100');
-                        }
-                    }, 10);
-                });
-            }
+             if (addSectionBtn) {
+                 addSectionBtn.addEventListener('click', () => {
+                     addSectionModal.classList.remove('hidden');
+                     setTimeout(() => {
+                         if (addSectionModalContent) {
+                             addSectionModalContent.classList.remove('scale-95', 'opacity-0');
+                             addSectionModalContent.classList.add('scale-100', 'opacity-100');
+                         }
+                     }, 10);
+                 });
+             }
 
 
-            const close = () => {
-                 if (addSectionModalContent) {
-                     addSectionModalContent.classList.add('scale-95', 'opacity-0');
-                 }
-                setTimeout(() => {
-                    addSectionModal.classList.add('hidden');
-                    if (addSectionForm) addSectionForm.reset();
-                }, 200);
-            };
+             const close = () => {
+                  if (addSectionModalContent) {
+                      addSectionModalContent.classList.add('scale-95', 'opacity-0');
+                  }
+                 setTimeout(() => {
+                     addSectionModal.classList.add('hidden');
+                     if (addSectionForm) addSectionForm.reset();
+                 }, 200);
+             };
 
-            if (closeSectionModalBtn) closeSectionModalBtn.addEventListener('click', close);
-            if (cancelSectionModalBtn) cancelSectionModalBtn.addEventListener('click', close);
-            addSectionModal.addEventListener('click', (e) => (e.target === addSectionModal) && close());
+             if (closeSectionModalBtn) closeSectionModalBtn.addEventListener('click', close);
+             if (cancelSectionModalBtn) cancelSectionModalBtn.addEventListener('click', close);
+             addSectionModal.addEventListener('click', (e) => (e.target === addSectionModal) && close());
 
-            if (addSectionForm) addSectionForm.addEventListener('submit', handleSectionFormSubmit);
-        }
+             if (addSectionForm) addSectionForm.addEventListener('submit', handleSectionFormSubmit);
+         }
 
-        /**
-         * 2. نافذة إضافة عنصر (رابط أو ملف)
-         */
         function setupAddItemModal() {
             addItemModal = document.getElementById('add-item-modal');
             if (!addItemModal) return;
@@ -596,10 +662,7 @@
             columnIdInput = document.getElementById('column-id-input');
             itemTypeInput = document.getElementById('item-type-input');
 
-            if (!sectionsContainer) {
-                 console.error("setupAddItemModal: sectionsContainer غير موجود!");
-                 return;
-            }
+            if (!sectionsContainer) return;
             sectionsContainer.addEventListener('click', (e) => {
                 const addItemBtn = e.target.closest('.add-item-btn');
                 const sectionEl = addItemBtn ? addItemBtn.closest('.column-wrapper') : null;
@@ -657,18 +720,13 @@
 
             if (tabFile) {
                 tabFile.addEventListener('click', () => {
-
                     showAlert('ميزة رفع الملفات قيد التطوير وتتطلب إعداد Firebase Storage.');
-
                 });
             }
 
             if (addItemForm) addItemForm.addEventListener('submit', handleItemFormSubmit);
         }
 
-        /**
-         * 3. نافذة تعديل القسم
-         */
         function setupEditSectionModal() {
             editSectionModal = document.getElementById('edit-section-modal');
             if (!editSectionModal) return;
@@ -680,12 +738,12 @@
             editSectionIdInput = document.getElementById('edit-section-id');
             currentEditorsList = document.getElementById('current-editors-list');
             currentEditorsContainer = document.getElementById('current-editors-container');
+            
+            // (جديد) عنصر خانة الاختيار للتحكم في الرؤية
+            const editSectionVisibilityCheckbox = document.getElementById('edit-section-visibility'); 
 
 
-             if (!sectionsContainer) {
-                 console.error("setupEditSectionModal: sectionsContainer غير موجود!");
-                 return;
-             }
+             if (!sectionsContainer) return;
             sectionsContainer.addEventListener('click', async (e) => { 
                 const editBtn = e.target.closest('.section-edit-btn');
                  const sectionEl = editBtn ? editBtn.closest('.column-wrapper') : null;
@@ -694,11 +752,18 @@
                 if (editBtn && canEdit) {
                     if (!sectionEl) return;
                     const sectionId = sectionEl.dataset.sectionId;
-                    const titleElement = sectionEl.querySelector('.section-title-text');
-                    const sectionTitle = titleElement ? titleElement.textContent : '';
+                    
+                    // (جديد) جلب بيانات القسم المحدثة
+                    const sectionData = await getSectionDataById(sectionId);
+                    if (!sectionData) return;
+
+                    const sectionTitle = sectionData.title || '';
+                    const isVisible = sectionData.isVisible !== false; // القيمة الافتراضية هي true
+
 
                    if(editSectionTitleInput) editSectionTitleInput.value = sectionTitle;
                     if (editSectionIdInput) editSectionIdInput.value = sectionId;
+                    if (editSectionVisibilityCheckbox) editSectionVisibilityCheckbox.checked = isVisible; // تحديث حالة الـ checkbox
 
                     await loadEditorsForSection(sectionId);
 
@@ -720,9 +785,6 @@
            }
         }
 
-        /**
-         * 4. نافذة تعديل العنصر
-         */
         function setupEditItemModal() {
             editItemModal = document.getElementById('edit-item-modal');
             if (!editItemModal) return;
@@ -735,10 +797,7 @@
             editItemIdInput = document.getElementById('edit-item-id');
             editItemSectionIdInput = document.getElementById('edit-item-section-id');
 
-             if (!sectionsContainer) {
-                 console.error("setupEditItemModal: sectionsContainer غير موجود!");
-                 return;
-             }
+             if (!sectionsContainer) return;
             sectionsContainer.addEventListener('click', (e) => {
                 const editBtn = e.target.closest('.item-edit-btn');
                  const sectionEl = editBtn ? editBtn.closest('.column-wrapper') : null;
@@ -774,9 +833,6 @@
            if (editItemForm) editItemForm.addEventListener('submit', handleEditItemFormSubmit);
         }
 
-        /**
-         * 5. نافذة التنبيه البسيطة
-         */
         function setupAlertModal() {
             alertModal = document.getElementById('alert-modal');
             if (!alertModal) return;
@@ -795,9 +851,6 @@
             alertModal.addEventListener('click', (e) => (e.target === alertModal) && close());
         }
 
-        /**
-         * 6. (جديد) تهيئة نافذة الدردشة المدمجة
-         */
         function setupChatWindow() {
             const chatToggle = document.getElementById('chat-toggle');
             chatWindow = document.getElementById('chat-window');
@@ -809,7 +862,6 @@
             chatMessageView = document.getElementById('chat-message-view');
 
             if (!chatToggle || !chatWindow || !closeChatBtn1 || !closeChatBtn2 || !chatBackBtn || !chatListView || !chatMessageView) {
-                console.error("عنصر واحد أو أكثر من عناصر الدردشة الرئيسية مفقود!");
                 return;
             }
 
@@ -817,7 +869,7 @@
             chatToggle.addEventListener('click', () => {
                 chatWindow.classList.toggle('hidden');
                 if (!chatWindow.classList.contains('hidden')) {
-                    // (جديد) عند الفتح، تأكد من أننا في قائمة الدردشة
+                    // عند الفتح، تأكد من أننا في قائمة الدردشة
                     chatListView.classList.remove('hidden');
                     chatMessageView.classList.add('hidden');
                 }
@@ -833,20 +885,16 @@
                 chatListView.classList.remove('hidden');
                 chatMessageView.classList.add('hidden');
                 
-                // (جديد) إيقاف الاستماع للرسائل عند الرجوع
+                // إيقاف الاستماع للرسائل عند الرجوع
                 if (chatMessageListeners[chatCurrentChat.id]) {
                     chatMessageListeners[chatCurrentChat.id]();
                     delete chatMessageListeners[chatCurrentChat.id];
                 }
-                // (اختياري) إعادة التعيين إلى الدردشة الجماعية كوضع افتراضي غير نشط
                 chatCurrentChat = { type: 'group', id: 'group' };
             });
         }
 
 
-        /**
-         * 7. نافذة إدارة المسؤولين
-         */
         function setupAdminManageModal() {
             adminManageModal = document.getElementById('admin-manage-modal');
             if (!adminManageModal) return;
@@ -870,7 +918,6 @@
             if (adminUsersList) {
                 adminUsersList.addEventListener('click', async (e) => {
                     const targetButton = e.target.closest('button');
-                    // (تعديل) التأكد من جلب data-user-id بدلاً من data-userId
                     const userIdToUpdate = targetButton ? targetButton.dataset.userId : null;
                     if (!userIdToUpdate) return;
 
@@ -881,9 +928,6 @@
         }
 
 
-        /**
-         * 8. نافذة طلبات الصلاحيات
-         */
         function setupAdminPermsModal() {
             adminPermsModal = document.getElementById('admin-perms-modal');
             if (!adminPermsModal) return;
@@ -939,18 +983,18 @@
 
                 querySnapshot.forEach(docSnap => {
                     const user = docSnap.data();
-                    const docId = docSnap.id; // هذا هو Auth UID
+                    const docId = docSnap.id;
                     const userName = user.name || '[اسم غير معروف]';
                     const userRole = user.role || 'viewer';
 
                     let roleLabel = 'فعّال 🟢';
                     let roleColor = 'text-green-600';
                     if (userRole === 'admin') { roleLabel = 'مدير 🔵'; roleColor = 'text-blue-600'; }
-                    if (userRole === 'editor') { roleLabel = 'محرر 🟠'; roleColor = 'text-orange-600'; } // (افتراض أن هناك دور محرر)
+                    if (userRole === 'editor') { roleLabel = 'محرر 🟠'; roleColor = 'text-orange-600'; }
                     if (userRole === 'suspended') { roleLabel = 'موقوف 🔴'; roleColor = 'text-red-600'; }
 
                     let actionsHTML = '';
-                    if (docId === userId) { // المقارنة بـ Auth UID
+                    if (docId === userId) {
                         actionsHTML = '<span class="text-xs text-gray-400">(أنت)</span>';
                     } else if (userRole === 'viewer' || userRole === 'editor') {
                         actionsHTML = `
@@ -1002,10 +1046,9 @@
          */
         async function updateUserRole(userIdToUpdate, action) {
             if (!isUserAdmin || !db || !usersPath) return;
-            console.log(`محاولة تنفيذ الإجراء '${action}' على المستخدم ${userIdToUpdate}`);
 
             try {
-                const userRef = doc(db, usersPath, userIdToUpdate); // استخدام Auth UID
+                const userRef = doc(db, usersPath, userIdToUpdate);
                 const userSnap = await getDoc(userRef);
                 if (!userSnap.exists()) {
                     showAlert("لم يتم العثور على المستخدم.");
@@ -1029,7 +1072,6 @@
                 } else if (action === 'remove') {
                     if (!confirm("⚠️ هل أنت متأكد أنك تريد حذف هذا المستخدم نهائيًا وجميع صلاحياته؟")) return;
 
-                    // إزالة اسم المستخدم من جميع الأقسام
                     const sectionsSnapshot = await getDocs(sectionsCollectionRef);
                     for (const section of sectionsSnapshot.docs) {
                         const sectionRef = doc(db, sectionsPath, section.id);
@@ -1056,7 +1098,6 @@
         function listenForPermissionRequests() {
             if (!permissionRequestsCollectionRef || !permsBtnBadge) return;
 
-            console.log("بدء الاستماع لطلبات الصلاحيات...");
             const q = query(permissionRequestsCollectionRef, where("status", "==", "pending"));
 
             if (permissionRequestsUnsubscribe) {
@@ -1065,7 +1106,6 @@
 
             permissionRequestsUnsubscribe = onSnapshot(q, (snapshot) => {
                 const pendingCount = snapshot.size;
-                console.log("عدد الطلبات المعلقة:", pendingCount);
                 if (pendingCount > 0) {
                     permsBtnBadge.textContent = pendingCount;
                     permsBtnBadge.classList.remove('hidden');
@@ -1130,7 +1170,6 @@
          */
         async function handlePermissionRequest(requestId, action) {
              if (!isUserAdmin || !db || !permissionRequestsPath || !sectionsPath) return;
-             console.log(`معالجة الطلب ${requestId} بالإجراء: ${action}`);
 
              const requestRef = doc(db, permissionRequestsPath, requestId);
              const newStatus = (action === 'approve') ? 'approved' : 'rejected';
@@ -1150,7 +1189,6 @@
                      await updateDoc(sectionRef, {
                          editors: arrayUnion(requestData.requesterName) 
                      });
-                     console.log(`تمت إضافة ${requestData.requesterName} كمحرر للقسم ${requestData.sectionId}`);
                      showAlert(`تمت الموافقة ومنح صلاحية التحرير لـ ${requestData.requesterName} على قسم "${requestData.sectionTitle}".`);
                  } else if (action === 'reject') {
                      showAlert(`تم رفض طلب ${requestData.requesterName} للتحكم في قسم "${requestData.sectionTitle}".`);
@@ -1168,9 +1206,7 @@
           * إرسال طلب تحكم في قسم
           */
         async function requestSectionControl(sectionId, sectionTitle) {
-            if (isUserAdmin || !currentUserName || !permissionRequestsCollectionRef) return;
-
-            console.log(`طلب التحكم في القسم ${sectionId} بواسطة ${currentUserName}`);
+            if (!currentUserName || !permissionRequestsCollectionRef) return;
 
             try {
                 const q = query(permissionRequestsCollectionRef,
@@ -1213,23 +1249,23 @@
         async function handleSectionFormSubmit(e) {
             e.preventDefault();
              const titleInput = document.getElementById('section-title');
+             const visibilityCheckbox = document.getElementById('section-visibility'); // (جديد)
             if (!titleInput) return;
             const newTitle = titleInput.value.trim();
+            const isVisible = visibilityCheckbox ? visibilityCheckbox.checked : true; // (جديد)
             if (!newTitle) return;
 
             try {
                  if (!sectionsCollectionRef) {
-                      console.error("handleSectionFormSubmit: sectionsCollectionRef لم يتم تهيئته!");
                       showAlert("خطأ في الاتصال لإضافة القسم.");
                       return;
                  }
                 await addDoc(sectionsCollectionRef, {
                     title: newTitle,
                     items: [],
-                    editors: [] 
+                    editors: [],
+                    isVisible: isVisible // (جديد) إضافة حقل الرؤية
                 });
-                console.log("تمت إضافة القسم:", newTitle);
-
                 const closeButton = document.getElementById('close-section-modal');
                 if (closeButton) closeButton.click();
             } catch (error) {
@@ -1243,14 +1279,12 @@
          */
         function listenForSections() {
              if (!sectionsCollectionRef) {
-                 console.error("listenForSections: sectionsCollectionRef لم يتم تهيئته!");
                  if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ فادح: لم يتم تهيئة اتصال الأقسام.</p>`;
                  return;
              }
-            const sectionsQuery = query(sectionsCollectionRef); // (ملاحظة: لإضافة الترتيب، نحتاج لإضافة حقل timestamp)
+            const sectionsQuery = query(sectionsCollectionRef);
 
             onSnapshot(sectionsQuery, (snapshot) => {
-                console.log("تم اكتشاف تغيير في الأقسام...");
                 if (sectionsContainer) sectionsContainer.innerHTML = '';
 
                 if(snapshot.empty) {
@@ -1267,25 +1301,28 @@
         }
 
         /**
-         * (Update) معالجة تعديل عنوان القسم
+         * (Update) معالجة تعديل عنوان القسم وحالة الرؤية
          */
         async function handleEditSectionFormSubmit(e) {
             e.preventDefault();
             const newTitle = editSectionTitleInput ? editSectionTitleInput.value.trim() : '';
             const sectionId = editSectionIdInput ? editSectionIdInput.value : '';
+            // (جديد) جلب حالة الرؤية من نافذة التعديل
+            const editSectionVisibilityCheckbox = document.getElementById('edit-section-visibility'); 
+            const newVisibility = editSectionVisibilityCheckbox ? editSectionVisibilityCheckbox.checked : true;
+
             if (!newTitle || !sectionId) return;
 
             try {
                  if (!db || !sectionsPath) {
-                      console.error("handleEditSectionFormSubmit: db أو sectionsPath غير مهيأ!");
                       showAlert("خطأ في الاتصال لتعديل القسم.");
                       return;
                  }
                 const sectionRef = doc(db, sectionsPath, sectionId);
                 await updateDoc(sectionRef, {
-                    title: newTitle
+                    title: newTitle,
+                    isVisible: newVisibility // (جديد) تحديث حقل الرؤية
                 });
-                console.log("تم تعديل القسم:", sectionId);
                 if(editSectionModal) editSectionModal.classList.add('hidden');
             } catch (error) {
                 console.error("خطأ في تعديل القسم:", error);
@@ -1297,10 +1334,7 @@
          * تحميل قائمة المحررين للقسم في نافذة التعديل
          */
         async function loadEditorsForSection(sectionId) {
-            if (!currentEditorsList || !currentEditorsContainer) {
-                 console.warn("loadEditorsForSection: عناصر قائمة المحررين غير موجودة.");
-                 return;
-            }
+            if (!currentEditorsList || !currentEditorsContainer) return;
 
             if (!isUserAdmin) {
                 currentEditorsContainer.classList.add('hidden');
@@ -1391,7 +1425,6 @@
                 }
                 newItemData.url = link;
             } else if (itemType === 'file') {
-
                 showAlert("ميزة رفع الملفات قيد التطوير.");
                 return;
             }
@@ -1399,7 +1432,6 @@
 
             try {
                  if (!db || !sectionsPath) {
-                      console.error("handleItemFormSubmit: db أو sectionsPath غير مهيأ!");
                       showAlert("خطأ في الاتصال لإضافة العنصر.");
                       return;
                  }
@@ -1407,7 +1439,6 @@
                 await updateDoc(sectionRef, {
                     items: arrayUnion(newItemData)
                 });
-                console.log("تمت إضافة العنصر إلى القسم:", sectionId);
                 const closeButton = document.getElementById('close-modal');
                 if (closeButton) closeButton.click();
             } catch (error) {
@@ -1430,7 +1461,6 @@
 
             try {
                  if (!db || !sectionsPath) {
-                      console.error("handleEditItemFormSubmit: db أو sectionsPath غير مهيأ!");
                       showAlert("خطأ في الاتصال لتعديل العنصر.");
                       return;
                  }
@@ -1450,7 +1480,6 @@
                     await updateDoc(sectionRef, {
                         items: updatedItems
                     });
-                    console.log("تم تعديل العنصر:", itemId);
                     const closeButton = document.getElementById('close-edit-item-modal');
                    if(closeButton) closeButton.click();
                 }
@@ -1465,7 +1494,6 @@
          */
         async function deleteItem(sectionId, itemId) {
              if (!db || !sectionsPath) {
-                  console.error("deleteItem: db أو sectionsPath غير مهيأ!");
                   showAlert("خطأ في الاتصال لحذف العنصر.");
                   return;
              }
@@ -1487,7 +1515,6 @@
                     await updateDoc(sectionRef, {
                         items: updatedItems
                     });
-                    console.log("تم حذف العنصر:", itemId);
                 }
             } catch (error) {
                 console.error("خطأ في حذف العنصر:", error);
@@ -1505,13 +1532,11 @@
 
             try {
                  if (!db || !sectionsPath) {
-                      console.error("deleteSection: db أو sectionsPath غير مهيأ!");
                       showAlert("خطأ في الاتصال لحذف القسم.");
                       return;
                  }
                 const sectionRef = doc(db, sectionsPath, sectionId);
                 await deleteDoc(sectionRef);
-                console.log("تم حذف القسم:", sectionId);
             } catch (error) {
                 console.error("خطأ في حذف القسم:", error);
                 showAlert("حدث خطأ أثناء حذف القسم.");
@@ -1532,6 +1557,17 @@
             const sectionId = doc.id;
             const editors = section.editors || []; 
             const userCanEditThisSection = currentUserRole !== 'suspended' && (isUserAdmin || editors.includes(currentUserName)); 
+            
+            // ===============================================
+            // منطق إخفاء القسم عن المشاهدين
+            // ===============================================
+            const isVisibleToAll = section.isVisible !== false; // القيمة الافتراضية هي true إذا لم يتم تعيينها
+
+            if (!isVisibleToAll && !isUserAdmin) {
+                // إذا كان القسم غير مرئي للجميع والمستخدم ليس مديراً، لا تعرضه.
+                return;
+            }
+            // ===============================================
 
             const sectionDiv = document.createElement('div');
             sectionDiv.className = "bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col column-wrapper";
@@ -1556,7 +1592,7 @@
                          </svg>
                     </button>
                     <button class="section-share-btn p-1 text-green-500 hover:text-green-600 transition-colors" title="مشاركة عبر واتساب">
-                       <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
+                       <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
                     </button>
                 </div>
             `;
@@ -1610,6 +1646,8 @@
             let href = item.url || '#';
             let target = (item.type === 'link' && item.url) ? 'target="_blank" rel="noopener noreferrer"' : '';
             let download = (item.type === 'file') ? `download="${item.title || 'file'}"` : '';
+            
+            const formattedTitle = replaceEmojis(item.title);
 
 
             const itemTypeIcon = (item.type === 'link')
@@ -1620,13 +1658,13 @@
                 <div class="flex items-center gap-3 flex-grow min-w-0"> 
                     ${itemTypeIcon}
                     <a href="${href}" ${target} ${download} class="font-semibold text-gray-800 hover:text-teal-600 transition-colors flex-grow min-w-0">
-                        <span class="block truncate">${item.title || 'عنصر بدون عنوان'}</span>
+                        <span class="block truncate">${formattedTitle || 'عنصر بدون عنوان'}</span>
                     </a>
                 </div>
 
                 <div class="flex items-center gap-1 flex-shrink-0 ml-2"> 
                     <button class="item-share-btn p-1 text-gray-400 hover:text-green-600 transition-colors" title="مشاركة عبر واتساب">
-                       <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
+                       <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
                     </button>
 
                     ${canEdit ? ` 
@@ -1655,12 +1693,15 @@
         function setupControlEvents(isAdmin) {
 
             // --- 1. الأزرار العامة ---
-            const logoutBtn = document.getElementById('logout-btn');
+            
+            // منطق الخروج الجديد
             if (logoutBtn) {
-                logoutBtn.addEventListener('click', () => {
+                logoutBtn.addEventListener('click', async () => {
                     if (confirm("هل أنت متأكد أنك تريد تسجيل الخروج؟")) {
                         localStorage.removeItem('rashedonUserName');
-                        window.location.reload();
+                        localStorage.removeItem(ADMIN_SIGNATURE); // حذف توقيع المدير
+                        await signOut(auth); // الخروج من جلسة Firebase المجهولة
+                        window.location.reload(); // إعادة تحميل لإعادة تعيين الحالة
                     }
                 });
             }
@@ -1671,10 +1712,14 @@
                     await generatePdfForSections(null);
                 });
             }
-
-
-            // --- 2. الأزرار الخاصة بالمدير ---
-            // (تم ربطها في دوال تهيئة النوافذ)
+            
+            // (جديد) ربط زر حذف جميع الدردشات
+            if (deleteAllChatBtn && isAdmin) {
+                 deleteAllChatBtn.classList.remove('hidden');
+                 deleteAllChatBtn.addEventListener('click', deleteAllChats);
+            } else if (deleteAllChatBtn) {
+                 deleteAllChatBtn.classList.add('hidden');
+            }
 
 
             // --- 3. تفويض الأحداث للأزرار داخل الأقسام والعناصر ---
@@ -1745,11 +1790,75 @@
                  });
             }
         }
+        
+        /**
+         * (جديد ومُعدَّل) دالة حذف جميع الدردشات (للمدير)
+         */
+        window.deleteAllChats = async function() {
+            if (!isUserAdmin) {
+                showAlert("ليس لديك صلاحية المدير لتنفيذ هذا الإجراء.", 'error');
+                return;
+            }
+
+            if (!confirm("⚠️ تحذير نهائي! هل أنت متأكد من حذف جميع الرسائل (الجماعية والخاصة) نهائياً؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
+
+            try {
+                const batch = writeBatch(db);
+                
+                // 1. حذف جميع رسائل الدردشة الجماعية (Collection: chat_group)
+                const groupSnapshot = await getDocs(chatPaths.groupChatCollection());
+                groupSnapshot.docs.forEach((doc) => {
+                    batch.delete(doc.ref);
+                });
+
+                // 2. تصفح جميع الوثائق في المجموعة الأصلية للمحادثات الخاصة (Collection: chat_private)
+                // وحذف الرسائل الموجودة داخل المجموعات الفرعية لكل وثيقة
+                const privateChatsBaseRef = collection(db, 'chat_private');
+                const privateChatsSnapshot = await getDocs(privateChatsBaseRef);
+                
+                for (const docSnap of privateChatsSnapshot.docs) {
+                    const messagesCollectionRef = collection(db, `chat_private/${docSnap.id}/messages`);
+                    const messagesSnapshot = await getDocs(messagesCollectionRef);
+                    
+                    // حذف كل رسالة داخل هذه المحادثة الخاصة
+                    messagesSnapshot.docs.forEach((msgDoc) => {
+                        batch.delete(msgDoc.ref);
+                    });
+                }
+                
+                // 3. مسح جميع حالات العدادات غير المقروءة (Collection: chat_state)
+                const chatStateBaseRef = collection(db, 'chat_state');
+                const chatStateSnapshot = await getDocs(chatStateBaseRef);
+                
+                for (const userStateDoc of chatStateSnapshot.docs) {
+                     const stateSubCollection = collection(db, `chat_state/${userStateDoc.id}/state`);
+                     const stateSnapshot = await getDocs(stateSubCollection);
+                     
+                     // حذف كل وثيقة حالة دردشة (التي تحتوي على العدادات)
+                     stateSnapshot.docs.forEach((stateDoc) => {
+                         batch.delete(stateDoc.ref);
+                     });
+                }
+
+
+                await batch.commit();
+                showAlert("✅ تم حذف جميع سجلات الدردشة بنجاح!", 'success');
+                
+                // إغلاق نافذة الدردشة وتحديث قائمة الرسائل
+                if (chatWindow && !chatWindow.classList.contains('hidden')) {
+                     document.getElementById('close-chat').click();
+                }
+            } catch (error) {
+                console.error("خطأ في حذف جميع الدردشات:", error);
+                showAlert("❌ حدث خطأ كبير أثناء حذف الدردشات. (تأكد من قواعد أمان Firestore)", 'error');
+            }
+        }
+
 
         /**
          * إظهار نافذة التنبيه
          */
-        function showAlert(message) {
+        function showAlert(message, type = 'info') {
             const alertModalMessage = document.getElementById('alert-modal-message');
             const modalContent = document.getElementById('alert-modal-content');
 
@@ -1816,7 +1925,6 @@
           */
         function chunkArray(array, size) {
            if (!Array.isArray(array)) {
-               console.warn("chunkArray: المدخل ليس مصفوفة.");
                return [];
            }
            const chunks = [];
@@ -1883,7 +1991,6 @@
                      listDiv.appendChild(itemDiv);
                  }
              } else {
-
                  listDiv.innerHTML = '<p style="padding: 10px; text-align: center;">لا توجد عناصر في هذا القسم.</p>';
              }
             sectionDiv.appendChild(listDiv);
@@ -1912,7 +2019,6 @@
                             correctLevel: QRCode.CorrectLevel.L
                         });
                     } catch(qrError) {
-                        console.error("خطأ في إنشاء QR Code:", qrError, "للرابط:", url);
                         qrDiv.textContent = "[خطأ QR]"; 
                     }
                 }
@@ -1929,7 +2035,6 @@
                     height: printContainer.offsetHeight
                 });
             } catch (canvasError) {
-                 console.error("خطأ في html2canvas:", canvasError);
                  document.body.removeChild(printContainer); 
                  throw canvasError; 
             }
@@ -1983,12 +2088,10 @@
                      const itemChunks = chunkArray(items, 5); 
 
                      if (itemChunks.length === 0) {
-
                          if (!isFirstPage) doc.addPage();
                          await createPdfPageFromHTML(doc, sectionTitle, []);
                          isFirstPage = false;
                      } else {
-
                          for (const chunk of itemChunks) {
                              if (!isFirstPage) doc.addPage();
                              await createPdfPageFromHTML(doc, sectionTitle, chunk);
@@ -2004,7 +2107,6 @@
                  }
 
             } catch (error) {
-                console.error("خطأ في إنشاء PDF:", error);
                 showAlert("حدث خطأ أثناء إنشاء ملف PDF.");
             } finally {
                 if (pdfSpinnerModal) pdfSpinnerModal.classList.add('hidden');
@@ -2016,14 +2118,8 @@
          * دالة مساعدة لجلب بيانات القسم المحدثة قبل الطباعة
          */
         async function getSectionDataById(sectionId) {
-            if (!sectionId) {
-                 console.warn("getSectionDataById: لم يتم توفير sectionId.");
-                 return null;
-            }
-             if (!db || !sectionsPath) {
-                  console.error("getSectionDataById: db أو sectionsPath غير مهيأ!");
-                  return null;
-             }
+            if (!sectionId) return null;
+             if (!db || !sectionsPath) return null;
             try {
                 const sectionRef = doc(db, sectionsPath, sectionId);
                 const sectionSnap = await getDoc(sectionRef);
@@ -2032,24 +2128,18 @@
                 }
                 return null;
             } catch (error) {
-                console.error("خطأ في جلب بيانات القسم:", error);
                 return null;
             }
         }
 
         // =================================================================
-        // =================================================================
         // == (جديد) بدء منطق الدردشة المدمج ==
-        // =================================================================
         // =================================================================
 
         /**
          * (جديد) بدء تشغيل منطق الدردشة
          */
         function initializeChatApp() {
-            console.log("بدء تهيئة تطبيق الدردشة المدمج...");
-            
-            // 1. جلب عناصر DOM للدردشة
             chatUsernameDisplay = document.getElementById('chat-username-display');
             chatUsersListDiv = document.getElementById('chat-users-list');
             chatMessagesDiv = document.getElementById('chat-messages');
@@ -2059,30 +2149,22 @@
             chatSubtitle = document.getElementById('chat-subtitle');
             
             if (!chatUsernameDisplay || !chatUsersListDiv || !chatMessagesDiv || !messageForm) {
-                console.error("لم يتم العثور على جميع عناصر الدردشة. إلغاء تهيئة الدردشة.");
                 return;
             }
             
-            // 2. تحديث واجهة المستخدم باسم المستخدم
             chatUsernameDisplay.textContent = currentUserName;
 
-            // 3. بدء الصوت (يتطلب نقرة المستخدم)
             initChatAudio();
             document.body.addEventListener('click', initChatAudio, { once: true });
             document.body.addEventListener('keydown', initChatAudio, { once: true });
 
-            // 4. ربط نموذج إرسال الرسالة
             messageForm.addEventListener('submit', handleChatMessageSubmit);
             
-            // 5. بدء الاستماع للمستخدمين (لتحديد قائمة المديرين/المستخدمين)
             listenToChatUsersAndAdmins();
             
-            // 6. بدء الاستماع للعدادات غير المقروءة
             listenToChatUnreadCounts();
             
-            // 7. تحديد الدردشة الجماعية (دون فتحها، فقط لتهيئة الحالة)
             chatCurrentChat = { type: 'group', id: 'group' };
-            console.log("اكتملت تهيئة الدردشة المدمجة.");
         }
 
         /**
@@ -2091,14 +2173,17 @@
         async function updateUserPresence() {
             if (!userId || !currentUserName) return;
             try {
-                // نستخدم chatPaths.userDoc الذي يشير إلى المسار الصحيح للمنصة
+                // التأكد من استخدام finalRole و finalName المحدثين
+                const finalRole = localStorage.getItem(ADMIN_SIGNATURE) === 'true' ? ADMIN_ROLE : 'viewer';
+                const finalName = localStorage.getItem('rashedonUserName') || 'مشاهد';
+                
                 await setDoc(chatPaths.userDoc(userId), { 
-                    name: currentUserName, // التأكد من مزامنة الاسم
-                    role: currentUserRole, // التأكد من مزامنة الدور
+                    name: finalName, 
+                    role: finalRole,
                     lastSeen: serverTimestamp() 
                 }, { merge: true });
             } catch (e) {
-                console.error("Failed to update user presence:", e);
+                console.error("فشل في تحديث حالة التواجد:", e);
             }
         }
         
@@ -2108,9 +2193,17 @@
         function initChatAudio() {
             if (chatSoundReady) return;
             Tone.start().then(() => {
-                chatSynth = new Tone.Synth().toDestination();
+                // استخدام صوت Sine بسيط وواضح للإشعارات
+                chatSynth = new Tone.Synth({
+                    oscillator: { type: "triangle" }, // استخدام موجة مثلثية أكثر وضوحاً
+                    envelope: {
+                        attack: 0.01,
+                        decay: 0.2, 
+                        sustain: 0,
+                        release: 0.3
+                    }
+                }).toDestination();
                 chatSoundReady = true;
-                console.log("Chat Audio ready.");
             }).catch(e => console.error("Chat Audio init failed:", e));
         }
         
@@ -2120,12 +2213,12 @@
         function playChatNotificationSound() {
             if (chatSoundReady && chatSynth) {
                 try {
-                    chatSynth.triggerAttackRelease("C5", "8n", Tone.now());
+                    // تشغيل نغمة عالية وواضحة (C5) بمدة أطول
+                    chatSynth.triggerAttackRelease("C5", "8n"); 
                 } catch(e) {
-                    console.error("Error playing chat sound:", e);
+                    // (فشل)
                 }
             } else {
-                console.log("Chat audio not ready, skipping sound.");
                 if (!chatSoundReady) initChatAudio();
             }
         }
@@ -2134,20 +2227,19 @@
          * (جديد) الاستماع لمستخدمي المنصة لبناء قوائم الدردشة
          */
         function listenToChatUsersAndAdmins() {
-            // نستخدم chatPaths.usersCollection الذي يشير إلى مسار مستخدمي المنصة
             onSnapshot(chatPaths.usersCollection(), (snapshot) => {
                 chatAllUsers = {};
                 chatAdminList = {};
                 snapshot.forEach((doc) => {
                     const userData = doc.data();
-                    const aUserId = doc.id; // هذا هو Auth UID
+                    const aUserId = doc.id; 
                     chatAllUsers[aUserId] = userData;
                     if (userData.role === 'admin') {
                         chatAdminList[aUserId] = userData;
                     }
                 });
-                renderPrivateChatList(); // إعادة رسم قائمة الدردشة الخاصة
-                setupPersistentChatListeners(); // إعداد المستمعات للرسائل غير المقروءة
+                renderPrivateChatList(); 
+                setupPersistentChatListeners(); 
             }, (error) => console.error("Error listening to chat users:", error));
         }
 
@@ -2155,7 +2247,6 @@
          * (جديد) دالة اختيار الدردشة (تفتح نافذة الرسائل)
          */
         window.selectChat = function(type, targetId) {
-            // إزالة التحديد من التبويب القديم (إن وجد)
             const oldTab = document.getElementById(`chat-tab-${chatCurrentChat.id.replace(':', '-')}`);
             if (oldTab) {
                 oldTab.classList.remove('bg-blue-50', 'border-r-4', 'border-blue-500');
@@ -2168,12 +2259,10 @@
                 title = 'دردشة جماعية';
                 subtitle = 'رسائل عامة للجميع';
                 
-                // تحديد التبويب الجديد
                 const newTab = document.getElementById('chat-tab-group');
                 if(newTab) newTab.classList.add('bg-blue-50', 'border-r-4', 'border-blue-500');
 
             } else {
-                // targetId هو Auth UID للمستخدم الآخر
                 const otherUserId = targetId;
                 const otherUserData = chatAllUsers[otherUserId];
                 
@@ -2185,10 +2274,8 @@
                 title = otherUserData.name || `مستخدم ${otherUserId.substring(0, 5)}`;
                 subtitle = `محادثة خاصة مع ${title}`;
                 
-                // إنشاء معرف دردشة خاص ثابت
                 chatId = getPrivateChatId(otherUserId);
                 
-                // تحديد التبويب الجديد
                 const newTab = document.getElementById(`chat-tab-${chatId.replace(':', '-')}`);
                 if (newTab) {
                     newTab.classList.add('bg-blue-50', 'border-r-4', 'border-blue-500');
@@ -2206,10 +2293,8 @@
             if (chatSubtitle) chatSubtitle.textContent = subtitle;
             if (chatMessagesDiv) chatMessagesDiv.innerHTML = '<div class="text-center text-gray-500">جاري تحميل الرسائل...</div>';
             
-            // الاستماع إلى الرسائل الجديدة لهذه الدردشة
             listenToChatMessages(chatId, type);
             
-            // تصفير عداد الرسائل غير المقروءة لهذه الدردشة
             clearChatUnreadCount(chatId);
         }
 
@@ -2225,7 +2310,6 @@
          * (جديد) الاستماع لرسائل الدردشة المحددة
          */
         function listenToChatMessages(chatId, type) {
-            // إلغاء الاشتراك في المستمع القديم
             if (chatMessageListeners[chatCurrentChat.id]) {
                 chatMessageListeners[chatCurrentChat.id]();
                 delete chatMessageListeners[chatCurrentChat.id];
@@ -2245,12 +2329,11 @@
                 });
                 renderChatMessages(messages.reverse());
                 
-                // تشغيل الإشعار
                 if (snapshot.docChanges().length > 0) {
                     const lastChange = snapshot.docChanges()[snapshot.docChanges().length - 1];
                     if (lastChange.type === "added") {
                         const newMessage = lastChange.doc.data();
-                        if (newMessage.userId !== userId) { // userId هو Auth UID للمستخدم الحالي
+                        if (newMessage.userId !== userId) { 
                             const now = Date.now();
                             const msgTime = newMessage.timestamp?.toDate().getTime() || now;
                             if ((now - msgTime) < 5000) { 
@@ -2260,7 +2343,6 @@
                     }
                 }
             }, (error) => {
-                console.error(`Error listening to chat messages for ${chatId}:`, error);
                 if (chatMessagesDiv) chatMessagesDiv.innerHTML = `<div class="text-center text-red-500">خطأ في تحميل الرسائل: ${error.message}</div>`;
             });
             
@@ -2281,8 +2363,8 @@
             
             const messageData = {
                 text: messageText,
-                userId: userId, // Auth UID
-                username: currentUserName, // اسم المنصة
+                userId: userId, 
+                username: currentUserName, 
                 timestamp: serverTimestamp()
             };
             
@@ -2294,8 +2376,33 @@
                 }
                 messageInput.value = '';
             } catch (e) {
-                console.error("Error sending chat message:", e);
                 showAlert("خطأ في إرسال الرسالة.");
+            }
+        }
+        
+        /**
+         * (جديد) حذف رسالة (للمدير فقط)
+         * @param {string} messageId - معرف الرسالة في Firestore
+         */
+        window.deleteChatMessage = async function(messageId) {
+            if (!isUserAdmin || !messageId) return;
+
+            if (!confirm("هل أنت متأكد من حذف هذه الرسالة؟")) return;
+
+            try {
+                let docRef;
+                if (chatCurrentChat.type === 'group') {
+                    docRef = doc(db, 'chat_group', messageId);
+                } else {
+                    // chatId هو مسار الوثائق الفرعية
+                    docRef = doc(db, `chat_private/${chatCurrentChat.id}/messages`, messageId); 
+                }
+                
+                await deleteDoc(docRef);
+                showAlert("تم حذف الرسالة بنجاح (كمدير).", 'success');
+            } catch (e) {
+                console.error("خطأ في حذف الرسالة:", e);
+                showAlert("فشل حذف الرسالة.");
             }
         }
 
@@ -2310,29 +2417,43 @@
             }
             
             chatMessagesDiv.innerHTML = messages.map(msg => {
-                const isSender = msg.userId === userId; // المقارنة بـ Auth UID
+                const isSender = msg.userId === userId; 
                 const senderName = isSender ? 'أنت' : (msg.username || 'مستخدم');
                 const time = msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '';
                 
+                // إضافة دعم الرموز التعبيرية البسيط
+                const formattedText = replaceEmojis(msg.text);
+                
+                // زر الحذف (يظهر للمدير فقط)
+                const deleteButton = isUserAdmin ? `
+                    <button onclick="deleteChatMessage('${msg.id}')" class="text-red-300 hover:text-red-500 transition-colors ml-2" title="حذف الرسالة">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                ` : '';
+
                 if (isSender) {
-                    // رسائل المرسل (على اليسار في الواجهة العربية)
                     return `
                         <div class="flex justify-start">
                             <div class="max-w-xs px-4 py-3 rounded-lg bg-blue-500 text-white shadow-md">
                                 <p class="text-sm font-semibold mb-1">${senderName}</p>
-                                <p class="text-base break-words">${msg.text}</p>
-                                <p class="text-xs text-blue-200 text-left mt-1">${time}</p>
+                                <p class="text-base break-words">${formattedText}</p>
+                                <div class="flex justify-between items-center text-xs text-blue-200 mt-1">
+                                    ${deleteButton}
+                                    <span>${time}</span>
+                                </div>
                             </div>
                         </div>
                     `;
                 } else {
-                    // رسائل الآخرين (على اليمين في الواجهة العربية)
                     return `
                         <div class="flex justify-end">
                             <div class="max-w-xs px-4 py-3 rounded-lg bg-gray-200 text-gray-800 shadow-md">
                                 <p class="text-sm font-semibold mb-1">${senderName}</p>
-                                <p class="text-base break-words">${msg.text}</p>
-                                <p class="text-xs text-gray-500 text-left mt-1">${time}</p>
+                                <p class="text-base break-words">${formattedText}</p>
+                                <div class="flex justify-between items-center text-xs text-gray-500 mt-1">
+                                    ${deleteButton}
+                                    <span>${time}</span>
+                                </div>
                             </div>
                         </div>
                     `;
@@ -2351,9 +2472,8 @@
             let usersHtml = '';
             
             if (isUserAdmin) {
-                // أنا مدير: عرض جميع المستخدمين
                 Object.keys(chatAllUsers).forEach(uid => {
-                    if (uid === userId) return; // لا تعرض نفسي
+                    if (uid === userId) return;
                     
                     const user = chatAllUsers[uid];
                     const chatId = getPrivateChatId(uid);
@@ -2372,9 +2492,8 @@
                 chatUsersListDiv.innerHTML = usersHtml || '<p class="p-4 text-sm text-gray-500">لا يوجد مستخدمون آخرون بعد.</p>';
                 
             } else {
-                // أنا مستخدم عادي: عرض جميع المديرين
                 Object.keys(chatAdminList).forEach(uid => {
-                    if (uid === userId) return; // (احتياطي، لا ينبغي أن يحدث)
+                    if (uid === userId) return;
                     
                     const admin = chatAdminList[uid];
                     const chatId = getPrivateChatId(uid);
@@ -2393,33 +2512,26 @@
                 chatUsersListDiv.innerHTML = usersHtml || '<p class="p-4 text-sm text-gray-500">لا يوجد مديرون متاحون للدردشة.</p>';
             }
             
-            // (اختياري) تحديث التحديد البصري
              const activeTab = document.getElementById(`chat-tab-${chatCurrentChat.id.replace(':', '-')}`);
-             if (activeTab && chatMessageView.classList.contains('hidden')) { // فقط إذا كنا في القائمة
+             if (activeTab && chatMessageView.classList.contains('hidden')) {
                 activeTab.classList.add('bg-blue-50', 'border-r-4', 'border-blue-500');
              }
         }
-        
+
         /**
          * (جديد) الاستماع لعدادات الرسائل غير المقروءة
          */
         function listenToChatUnreadCounts() {
             if (!userId) return;
-            const chatStateQuery = chatPaths.userChatStateCollection(userId); // استخدام Auth UID
+            const chatStateQuery = chatPaths.userChatStateCollection(userId); 
             chatMessageListeners['all-state'] = onSnapshot(chatStateQuery, (snapshot) => {
-                let totalPrivateUnread = 0;
-                let groupUnread = 0;
+                let totalUnread = 0; // العداد الكلي للزر العائم
                 
                 snapshot.forEach(doc => {
                     const chatId = doc.id;
                     const count = doc.data().unreadCount || 0;
                     chatUnreadCounts[chatId] = count;
-                    
-                    if (chatId === 'group') {
-                        groupUnread = count;
-                    } else if (chatId.includes(':')) { 
-                        totalPrivateUnread += count;
-                    }
+                    totalUnread += count; // إضافة للعداد الكلي
                     
                     const badge = document.getElementById(`unread-badge-${chatId.replace(':', '-')}`);
                     if (badge) {
@@ -2428,19 +2540,12 @@
                     }
                 });
                 
-                const groupBadge = document.getElementById('unread-badge-group');
-                if (groupBadge) {
-                    groupBadge.textContent = groupUnread;
-                    groupBadge.classList.toggle('hidden', groupUnread === 0);
+                // تحديث شارة الدردشة العائمة
+                if (chatTotalBadge) {
+                    chatTotalBadge.textContent = totalUnread;
+                    chatTotalBadge.classList.toggle('hidden', totalUnread === 0);
                 }
 
-                const privateBadge = document.getElementById('unread-badge-private-total');
-                if (privateBadge) {
-                    privateBadge.textContent = totalPrivateUnread;
-                    privateBadge.classList.toggle('hidden', totalPrivateUnread === 0);
-                }
-                
-                // إعادة رسم القائمة لتحديث العدادات المفقودة (إذا كان مديراً)
                 if (isUserAdmin) {
                     renderPrivateChatList();
                 }
@@ -2470,45 +2575,29 @@
             });
             
             // 2. مستمعات للدردشات الخاصة
-            if (isUserAdmin) {
-                // أنا مدير: الاستماع لجميع المستخدمين
-                Object.keys(chatAllUsers).forEach(uid => {
-                    if (uid === userId) return;
-                    const chatId = getPrivateChatId(uid);
-                    const q = query(chatPaths.privateChatCollection(chatId), orderBy("timestamp", "desc"), limit(1));
-                    chatMessageListeners[`unread-${chatId}`] = onSnapshot(q, (snapshot) => {
-                         if (snapshot.docChanges().length > 0 && snapshot.docChanges()[0].type === 'added') {
-                            const newMessage = snapshot.docChanges()[0].doc.data();
-                            if (newMessage.userId !== userId && chatCurrentChat.id !== chatId) {
-                                const now = Date.now();
-                                const msgTime = newMessage.timestamp?.toDate().getTime() || now;
-                                if ((now - msgTime) < 10000) {
-                                    incrementChatUnreadCount(chatId);
-                                }
+            const usersToListen = isUserAdmin ? Object.keys(chatAllUsers) : Object.keys(chatAdminList);
+            
+            usersToListen.forEach(uid => {
+                if (uid === userId) return;
+                const chatId = getPrivateChatId(uid);
+                
+                // تجنب تكرار المستمعات إذا تم تشغيل الدالة مراراً
+                if (chatMessageListeners[`unread-${chatId}`]) return; 
+                
+                const q = query(chatPaths.privateChatCollection(chatId), orderBy("timestamp", "desc"), limit(1));
+                chatMessageListeners[`unread-${chatId}`] = onSnapshot(q, (snapshot) => {
+                     if (snapshot.docChanges().length > 0 && snapshot.docChanges()[0].type === 'added') {
+                        const newMessage = snapshot.docChanges()[0].doc.data();
+                        if (newMessage.userId !== userId && chatCurrentChat.id !== chatId) {
+                            const now = Date.now();
+                            const msgTime = newMessage.timestamp?.toDate().getTime() || now;
+                            if ((now - msgTime) < 10000) {
+                                incrementChatUnreadCount(chatId);
                             }
                         }
-                    });
+                    }
                 });
-            } else {
-                // أنا مستخدم: الاستماع لجميع المديرين
-                Object.keys(chatAdminList).forEach(uid => {
-                    if (uid === userId) return;
-                    const chatId = getPrivateChatId(uid);
-                    const q = query(chatPaths.privateChatCollection(chatId), orderBy("timestamp", "desc"), limit(1));
-                    chatMessageListeners[`unread-${chatId}`] = onSnapshot(q, (snapshot) => {
-                         if (snapshot.docChanges().length > 0 && snapshot.docChanges()[0].type === 'added') {
-                            const newMessage = snapshot.docChanges()[0].doc.data();
-                            if (newMessage.userId !== userId && chatCurrentChat.id !== chatId) {
-                                const now = Date.now();
-                                const msgTime = newMessage.timestamp?.toDate().getTime() || now;
-                                if ((now - msgTime) < 10000) {
-                                    incrementChatUnreadCount(chatId);
-                                }
-                            }
-                        }
-                    });
-                });
-            }
+            });
         }
         
         /**
@@ -2521,8 +2610,9 @@
                 const docSnap = await getDoc(docRef);
                 const currentCount = docSnap.exists() ? (docSnap.data().unreadCount || 0) : 0;
                 await setDoc(docRef, { unreadCount: currentCount + 1 }, { merge: true });
+                playChatNotificationSound(); // تشغيل الصوت هنا
             } catch (e) {
-                console.error("Error incrementing chat unread count:", e);
+                // (فشل)
             }
         }
         
@@ -2535,7 +2625,7 @@
             try {
                 await setDoc(docRef, { unreadCount: 0 }, { merge: true });
             } catch (e) {
-                console.error("Error clearing chat unread count:", e);
+                // (فشل)
             }
         }
 
@@ -2549,17 +2639,14 @@
 
     <div class="flex flex-col min-h-screen">
 
-        <!-- الشريط العلوي الرئيسي -->
         <header class="bg-teal-700 text-white p-4 shadow-lg">
             <div class="container mx-auto flex justify-between items-center">
-                <!-- الشعار والعنوان -->
                 <div class="flex items-center gap-3">
                     <svg class="w-10 h-10" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
                     </svg>
                     <h1 class="text-2xl font-bold">منصة مدرسة الراشدون</h1>
                 </div>
-                <!-- معلومات المستخدم -->
                 <div class="flex items-center gap-3">
                     <span id="user-name-display" class="hidden md:inline"></span>
                     <svg id="user-avatar" class="w-8 h-8 bg-white text-teal-700 rounded-full p-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -2569,11 +2656,9 @@
             </div>
         </header>
 
-        <!-- شريط التنقل الثاني (الأزرار) -->
         <nav class="bg-white shadow-md p-3 sticky top-0 z-40">
             <div class="container mx-auto flex justify-center items-center gap-2 md:gap-4 flex-wrap">
-                <!-- أزرار المدير (مخفية افتراضياً) -->
-                 <div class="relative hidden"> 
+                <div class="relative hidden"> 
                      <button id="admin-manage-btn" class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">
                          <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM12 15a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
                          إدارة 
@@ -2592,8 +2677,12 @@
                          إضافة 
                      </button>
                  </div>
+                 
+                 <button id="delete-all-chat-btn" class="hidden flex items-center gap-2 bg-red-700 text-white px-4 py-2 rounded-lg shadow-md hover:bg-red-800 transition duration-300" onclick="deleteAllChats()">
+                     <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
+                     حذف جميع الدردشات
+                 </button>
 
-                <!-- أزرار عامة (مخفية حتى يتم تسجيل الدخول) -->
                 <button id="print-sections-btn" class="hidden flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-gray-700 transition duration-300">
                     <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                        <path fill-rule="evenodd" d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0113.25 8H6.75A1.75 1.75 0 015 6.25v-3.5zm.75 0v3.5c0 .138.112.25.25.25h6.5a.25.25 0 00.25-.25v-3.5a.25.25 0 00-.25-.25h-6.5a.25.25 0 00-.25.25zM6 10.75A.75.75 0 016.75 10h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 016 10.75zM6 13.75A.75.75 0 016.75 13h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 016 13.75zM3.25 9A1.75 1.75 0 001.5 10.75v3.5c0 .966.784 1.75 1.75 1.75h1.25a.75.75 0 010 1.5H3.25A3.25 3.25 0 010 14.25v-3.5A3.25 3.25 0 013.25 7.5h13.5A3.25 3.25 0 0120 10.75v3.5A3.25 3.25 0 0116.75 17.5h-1.25a.75.75 0 010-1.5h1.25A1.75 1.75 0 0018.5 14.25v-3.5A1.75 1.75 0 0016.75 9H3.25z" clip-rule="evenodd" />
@@ -2604,13 +2693,15 @@
                     <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>
                     خروج
                 </button>
+                <button id="login-admin-btn" class="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-teal-700 transition duration-300">
+                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>
+                    تسجيل دخول المدير
+                </button>
             </div>
         </nav>
 
-        <!-- المحتوى الرئيسي (الأعمدة) -->
         <main class="flex-grow p-4 md:p-8">
             <div id="sections-container" class="container mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- حالة التحميل الأولي -->
                 <p class="text-gray-500 text-center col-span-3 text-xl p-10">
                     جاري الاتصال بقاعدة البيانات...
                 </p>
@@ -2618,29 +2709,30 @@
         </main>
     </div>
 
-    <!-- زر الدردشة العائم -->
     <div class="fixed bottom-6 right-6 z-50">
-        <button id="chat-toggle" class="bg-blue-600 text-white rounded-full w-16 h-16 flex items-center justify-center shadow-xl hover:bg-blue-700 transition-transform hover:scale-110">
+        <button id="chat-toggle" class="bg-blue-600 text-white rounded-full w-16 h-16 flex items-center justify-center shadow-xl hover:bg-blue-700 transition-transform hover:scale-110 relative">
             <svg class="w-8 h-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443h2.88a1.875 1.875 0 001.875-1.875V16.5m-13.5-3.825V6.375c0-1.6 1.123-2.994 2.707-3.227 1.087.16 2.185.283 3.293.369V3l4.076 4.076a1.526 1.526 0 011.037.443h2.88a1.875 1.875 0 011.875 1.875v1.65M16.5 12V6.375m0 5.625v3.825m0 0v3.75m-13.5-3.75h13.5" />
             </svg>
+            <span id="chat-total-badge" class="hidden">0</span>
         </button>
     </div>
 
-    <!-- #################### النوافذ المنبثقة (Modals) #################### -->
-
-    <!-- 1. نافذة تسجيل الدخول (بالاسم) -->
     <div id="login-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[100] p-4">
         <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md text-center">
             <svg class="w-20 h-20 text-teal-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
             </svg>
             <h2 class="text-3xl font-bold text-gray-800 mb-2">أهلاً بك في منصة الراشدون</h2>
-            <p class="text-gray-600 mb-6">الرجاء إدخال اسمك للمتابعة.</p>
+            <p class="text-gray-600 mb-6">الرجاء إدخال اسمك (وكلمة المرور إذا كنت المدير).</p>
             <form id="login-form">
                 <div class="mb-4 text-right">
                     <label for="user-name-input" class="block text-sm font-medium text-gray-700 mb-1">الاسم الكامل</label>
                     <input type="text" id="user-name-input" required class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-lg" placeholder="مثال: علي عسيري أو اسم الطالب">
+                </div>
+                 <div class="mb-4 text-right">
+                    <label for="user-password-input" class="block text-sm font-medium text-gray-700 mb-1">كلمة المرور (خاصة بالمدير)</label>
+                    <input type="password" id="user-password-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-lg" placeholder="اتركها فارغة للمشاهدة">
                 </div>
                 <p id="login-error" class="hidden text-red-500 text-sm mb-4"></p>
                 <button type="submit" class="w-full bg-teal-600 text-white py-3 px-5 rounded-lg hover:bg-teal-700 transition-colors font-bold text-lg">
@@ -2650,25 +2742,22 @@
         </div>
     </div>
 
-    <!-- 2. (جديد) نافذة الدردشة المدمجة -->
     <div id="chat-window" class="hidden fixed bottom-24 right-6 w-96 h-[500px] bg-white rounded-lg shadow-2xl flex flex-col z-50 overflow-hidden">
         
-        <!-- View 1: قائمة الدردشات (يظهر افتراضياً) -->
         <div id="chat-list-view" class="flex flex-col h-full">
-            <!-- رأس قائمة الدردشة -->
             <div class="flex justify-between items-center p-3 bg-blue-600 text-white">
                 <h3 id="chat-list-header-title" class="font-bold">الدردشات</h3>
                 <button id="close-chat" class="text-white text-2xl">&times;</button>
             </div>
             
-            <!-- معلومات المستخدم (مبسطة) -->
             <div id="chat-user-info" class="p-3 border-b text-sm">
                 <p>مرحباً، <span id="chat-username-display" class="font-semibold">...</span></p>
+                <button id="delete-all-chat-btn" class="hidden text-red-500 text-xs font-semibold mt-1 hover:text-red-700" onclick="deleteAllChats()">
+                    [حذف جميع سجلات الدردشة]
+                </button>
             </div>
 
-            <!-- تبويبات الدردشة (من chat_app_v2) -->
             <div class="flex-grow overflow-y-auto">
-                <!-- تبويب الدردشة الجماعية -->
                 <div id="chat-tab-group" class="p-4 flex justify-between items-center cursor-pointer border-b hover:bg-gray-100" onclick="selectChat('group', 'group')">
                     <div>
                         <h3 class="font-semibold text-gray-900">دردشة جماعية</h3>
@@ -2677,24 +2766,20 @@
                     <span id="unread-badge-group" class="hidden w-6 h-6 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">0</span>
                 </div>
                 
-                <!-- قسم المحادثات الخاصة -->
                 <div class="p-4 border-b">
-                    <h3 class="font-semibold text-gray-900 flex justify-between items-center">
+                    <h3 class="private-chat-header flex justify-between items-center">
                         محادثات خاصة
                         <span id="unread-badge-private-total" class="hidden w-6 h-6 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">0</span>
                     </h3>
                 </div>
                 
-                <!-- قائمة المستخدمين (للمدير) / قائمة المسؤولين (للمستخدم) -->
                 <div id="chat-users-list" class="flex-grow overflow-y-auto">
                     <p class="p-4 text-sm text-gray-500">جاري تحميل المستخدمين...</p>
                 </div>
             </div>
         </div>
 
-        <!-- View 2: نافذة الرسائل (مخفي افتراضياً) -->
         <div id="chat-message-view" class="hidden flex flex-col h-full">
-            <!-- رأس الرسائل (مع زر الرجوع) -->
             <div class="flex justify-between items-center p-3 bg-blue-600 text-white">
                 <button id="chat-back-btn" class="text-white p-1 rounded-full hover:bg-blue-700">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l-4-4 4-4M9 5l-7 7 7 7"></path></svg>
@@ -2706,12 +2791,9 @@
                 <button id="close-chat-2" class="text-white text-2xl flex-shrink-0">&times;</button>
             </div>
             
-            <!-- حاوية الرسائل (من chat_app_v2) -->
             <div id="chat-messages" class="flex-1 p-3 overflow-y-auto bg-gray-50 space-y-3">
-                <!-- الرسائل ستظهر هنا -->
-            </div>
+                </div>
             
-            <!-- صندوق إدخال الرسالة (من chat_app_v2) -->
             <form id="message-form" class="p-3 border-t flex gap-2 bg-white">
                 <input type="text" id="message-input" placeholder="اكتب رسالتك..." autocomplete="off"
                        class="flex-1 px-3 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -2726,7 +2808,6 @@
     </div>
 
 
-    <!-- 3. نافذة إضافة عنصر (Modal) -->
     <div id="add-item-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 transition-opacity duration-300">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md transform transition-all scale-95 opacity-0" id="modal-content">
             <div class="flex justify-between items-center border-b pb-3 mb-4">
@@ -2777,7 +2858,6 @@
         </div>
     </div>
 
-    <!-- 4. نافذة إضافة قسم (Modal) -->
     <div id="add-section-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 transition-opacity duration-300">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md transform transition-all scale-95 opacity-0" id="add-section-modal-content">
             <div class="flex justify-between items-center border-b pb-3 mb-4">
@@ -2785,9 +2865,15 @@
                 <button id="close-section-modal" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button>
             </div>
             <form id="add-section-form">
-                <div>
-                    <label for="section-title" class="block text-sm font-medium text-gray-700 mb-1">عنوان القسم</label>
-                    <input type="text" id="section-title" name="section-title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                <div class="space-y-4">
+                    <div>
+                        <label for="section-title" class="block text-sm font-medium text-gray-700 mb-1">عنوان القسم</label>
+                        <input type="text" id="section-title" name="section-title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div class="flex items-center">
+                        <input id="section-visibility" type="checkbox" checked class="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500">
+                        <label for="section-visibility" class="mr-2 text-sm font-medium text-gray-900">إظهار هذا القسم للمشاهدين العاديين</label>
+                    </div>
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
                     <button type="button" id="cancel-section-modal" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
@@ -2801,7 +2887,6 @@
         </div>
     </div>
 
-    <!-- 5. نافذة تعديل القسم (Modal) -->
     <div id="edit-section-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <div class="flex justify-between items-center border-b pb-3 mb-4">
@@ -2810,17 +2895,22 @@
             </div>
             <form id="edit-section-form">
                 <input type="hidden" id="edit-section-id">
-                <div>
-                    <label for="edit-section-title" class="block text-sm font-medium text-gray-700 mb-1">عنوان القسم</label>
-                    <input type="text" id="edit-section-title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                <div class="space-y-4">
+                    <div>
+                        <label for="edit-section-title" class="block text-sm font-medium text-gray-700 mb-1">عنوان القسم</label>
+                        <input type="text" id="edit-section-title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div class="flex items-center">
+                        <input id="edit-section-visibility" type="checkbox" class="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500">
+                        <label for="edit-section-visibility" class="mr-2 text-sm font-medium text-gray-900">إظهار هذا القسم للمشاهدين العاديين</label>
+                    </div>
                 </div>
                 <div id="current-editors-container" class="hidden mt-6">
                     <h4 class="text-lg font-semibold text-gray-800 mb-2 border-t pt-4">المحررون الحاليون</h4>
                     <p class="text-sm text-gray-500 mb-3">يمكنك إزالة صلاحيات التحرير من المستخدمين المضافين هنا.</p>
                     <div class="max-h-40 overflow-y-auto bg-gray-50 rounded-lg p-3">
                         <ul id="current-editors-list" class="divide-y divide-gray-200">
-                            <!-- سيتم ملء القائمة هنا -->
-                        </ul>
+                            </ul>
                     </div>
                 </div>
                 <div class="mt-6 flex justify-end gap-3">
@@ -2831,7 +2921,6 @@
         </div>
     </div>
 
-    <!-- 6. نافذة تعديل العنصر (Modal) -->
     <div id="edit-item-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <div class="flex justify-between items-center border-b pb-3 mb-4">
@@ -2859,7 +2948,6 @@
         </div>
     </div>
 
-    <!-- 7. نافذة تنبيه بسيطة (Modal) -->
     <div id="alert-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4 transition-opacity duration-300">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm transform transition-all scale-95 opacity-0" id="alert-modal-content">
             <h3 class="text-xl font-bold text-gray-800 mb-4">تنبيه</h3>
@@ -2872,7 +2960,6 @@
         </div>
     </div>
 
-    <!-- 8. نافذة تحميل إنشاء PDF (Modal) -->
     <div id="pdf-spinner-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4">
         <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-xs text-center">
             <svg class="animate-spin h-12 w-12 text-teal-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -2883,7 +2970,6 @@
         </div>
     </div>
 
-    <!-- 9. نافذة إدارة المسؤولين -->
     <div id="admin-manage-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
             <div class="flex justify-between items-center border-b pb-3 mb-4">
@@ -2892,15 +2978,13 @@
             </div>
             <div class="flow-root max-h-96 overflow-y-auto">
                 <ul id="admin-users-list" role="list" class="divide-y divide-gray-200">
-                    <!-- سيتم ملء قائمة المستخدمين هنا -->
                     <li>جاري تحميل المستخدمين...</li>
                 </ul>
             </div>
         </div>
     </div>
 
-    <!-- 10. نافذة طلبات الصلاحيات -->
-     <div id="admin-perms-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
+    <div id="admin-perms-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
          <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
              <div class="flex justify-between items-center border-b pb-3 mb-4">
                  <h3 class="text-2xl font-bold text-gray-800">طلبات الصلاحيات المعلقة</h3>
@@ -2908,7 +2992,6 @@
              </div>
              <div class="flow-root max-h-96 overflow-y-auto">
                  <ul id="admin-perms-list" role="list" class="divide-y divide-gray-200">
-                     <!-- سيتم ملء قائمة الطلبات هنا -->
                      <li>جاري تحميل الطلبات...</li>
                  </ul>
              </div>
