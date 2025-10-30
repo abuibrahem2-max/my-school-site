@@ -13,6 +13,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
     
     <script>
@@ -23,9 +25,9 @@
              };
              let replacedText = text;
              for (const key in emojiMap) {
-                const safeKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                const regex = new RegExp(safeKey, 'g');
-                replacedText = replacedText.replace(regex, emojiMap[key]);
+                 const safeKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                 const regex = new RegExp(safeKey, 'g');
+                 replacedText = replacedText.replace(regex, emojiMap[key]);
              }
              return replacedText;
         }
@@ -191,6 +193,32 @@
             font-size: 14px;
             font-weight: 600;
         }
+        
+        /* (تعديل) نمط مقبض السحب والإفلات */
+        .drag-handle {
+            cursor: move;
+            flex-shrink: 0;
+            margin-left: 8px; 
+            padding: 4px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+            /* (جديد) تطبيق لون تركوازي غامق */
+            color: #008080; 
+        }
+        .drag-handle:hover {
+            background-color: #f3f4f6; /* gray-100 */
+            color: #008080; /* تثبيت اللون في حالة التحويم */
+        }
+        
+        /* (جديد) تأكد من أن البطاقة قابلة للسحب ولكن السحب يتم عبر المقبض فقط */
+        .sortable-drag {
+            opacity: 0.5 !important;
+            border: 2px dashed #008080;
+        }
+        .sortable-ghost {
+            opacity: 0.1;
+        }
+        
     </style>
 
     <script type="module">
@@ -217,7 +245,7 @@
         
         // --- بيانات المدير الثابتة (يجب تغييرها) ---
         const ADMIN_USERNAME = "مدير"; // غيّر هذا الاسم
-        const ADMIN_PASSWORD = "مدرستنا"; // غيّر كلمة المرور هذه
+        const ADMIN_PASSWORD = "منصتنا"; // غيّر كلمة المرور هذه
         const ADMIN_ROLE = "admin";
         const ADMIN_SIGNATURE = "rashedon_admin_key"; // توقيع يُحفظ في localStorage
         // ------------------------------
@@ -314,7 +342,7 @@
             // (جديد) عناصر أزرار تسجيل الدخول/الخروج
             logoutBtn = document.getElementById('logout-btn');
             loginAdminBtn = document.getElementById('login-admin-btn');
-            chatTotalBadge = document.getElementById('chat-total-badge'); // شارة الدردشة الكلية
+            chatTotalBadge = document.getElementById('chat-toggle').querySelector('#chat-total-badge'); // شارة الدردشة الكلية
             deleteAllChatBtn = document.getElementById('delete-all-chat-btn'); // زر حذف جميع الدردشات
 
             // تهيئة نافذة تسجيل الدخول (المنصة)
@@ -453,7 +481,7 @@
                     
                     // تشغيل منطق الواجهة فوراً إذا كان الاسم موجوداً محليا
                     if (localUserName) {
-                       initializeAppLogic(currentUserName);
+                        initializeAppLogic(currentUserName);
                     }
                 }
                 
@@ -588,7 +616,7 @@
             generalControls.forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) {
-                       btn.classList.remove('hidden');
+                         btn.classList.remove('hidden');
                 }
             });
             
@@ -649,7 +677,7 @@
              addSectionModal.addEventListener('click', (e) => (e.target === addSectionModal) && close());
 
              if (addSectionForm) addSectionForm.addEventListener('submit', handleSectionFormSubmit);
-         }
+           }
 
         function setupAddItemModal() {
             addItemModal = document.getElementById('add-item-modal');
@@ -742,7 +770,7 @@
             // (جديد) عنصر خانة الاختيار للتحكم في الرؤية
             const editSectionVisibilityCheckbox = document.getElementById('edit-section-visibility'); 
 
-
+            
              if (!sectionsContainer) return;
             sectionsContainer.addEventListener('click', async (e) => { 
                 const editBtn = e.target.closest('.section-edit-btn');
@@ -939,7 +967,7 @@
             if (adminPermsBtn) {
                  adminPermsBtn.addEventListener('click', async () => {
                      if (!isUserAdmin) {
-                          showAlert('لطلب صلاحيات إضافية، يرجى التواصل مع مدير المنصة.');
+                         showAlert('لطلب صلاحيات إضافية، يرجى التواصل مع مدير المنصة.');
                           return;
                      }
                      await loadPermissionRequests(); 
@@ -1092,9 +1120,9 @@
         }
 
 
-         /**
-          * الاستماع لطلبات الصلاحيات وتحديث الشارة
-          */
+          /**
+           * الاستماع لطلبات الصلاحيات وتحديث الشارة
+           */
         function listenForPermissionRequests() {
             if (!permissionRequestsCollectionRef || !permsBtnBadge) return;
 
@@ -1119,9 +1147,9 @@
         }
 
 
-         /**
-          * تحميل وعرض طلبات الصلاحيات المعلقة في النافذة
-          */
+          /**
+           * تحميل وعرض طلبات الصلاحيات المعلقة في النافذة
+           */
         async function loadPermissionRequests() {
             if (!adminPermsList || !permissionRequestsCollectionRef) return;
             adminPermsList.innerHTML = '<li>جاري تحميل الطلبات...</li>';
@@ -1202,9 +1230,9 @@
              }
         }
 
-         /**
-          * إرسال طلب تحكم في قسم
-          */
+          /**
+           * إرسال طلب تحكم في قسم
+           */
         async function requestSectionControl(sectionId, sectionTitle) {
             if (!currentUserName || !permissionRequestsCollectionRef) return;
 
@@ -1253,18 +1281,21 @@
             if (!titleInput) return;
             const newTitle = titleInput.value.trim();
             const isVisible = visibilityCheckbox ? visibilityCheckbox.checked : true; // (جديد)
+            const newOrder = Date.now(); // استخدام التوقيت كترتيب افتراضي (يمكنك تعديل هذا إذا كنت تريد ترتيباً مختلفاً)
+
             if (!newTitle) return;
 
             try {
                  if (!sectionsCollectionRef) {
-                      showAlert("خطأ في الاتصال لإضافة القسم.");
+                     showAlert("خطأ في الاتصال لإضافة القسم.");
                       return;
                  }
                 await addDoc(sectionsCollectionRef, {
                     title: newTitle,
                     items: [],
                     editors: [],
-                    isVisible: isVisible // (جديد) إضافة حقل الرؤية
+                    isVisible: isVisible, // (جديد) إضافة حقل الرؤية
+                    order: newOrder // (جديد) حقل الترتيب
                 });
                 const closeButton = document.getElementById('close-section-modal');
                 if (closeButton) closeButton.click();
@@ -1282,6 +1313,7 @@
                  if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ فادح: لم يتم تهيئة اتصال الأقسام.</p>`;
                  return;
              }
+            // (تعديل) إضافة orderBy إذا كان الترتيب مطلوباً على مستوى الأقسام نفسها
             const sectionsQuery = query(sectionsCollectionRef);
 
             onSnapshot(sectionsQuery, (snapshot) => {
@@ -1294,11 +1326,87 @@
                 snapshot.docs.forEach((doc) => {
                     renderSection(doc);
                 });
+                
+                // (جديد) تفعيل خاصية السحب والإفلات بعد رسم جميع الأقسام
+                setupItemSorting();
+
             }, (error) => {
                 console.error("خطأ في جلب الأقسام:", error);
                 if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ في الاتصال بقاعدة البيانات. تأكد من إعداداتك.</p>`;
             });
         }
+        
+        /**
+         * (جديد) إعداد خاصية السحب والإفلات داخل كل قسم
+         */
+        function setupItemSorting() {
+            const lists = sectionsContainer ? sectionsContainer.querySelectorAll('.column-list') : [];
+            lists.forEach(list => {
+                const sectionEl = list.closest('.column-wrapper');
+                const sectionId = sectionEl ? sectionEl.dataset.sectionId : null;
+                const canEdit = sectionEl ? sectionEl.dataset.canEdit === 'true' : false;
+
+                if (list && sectionId && canEdit) {
+                    Sortable.create(list, {
+                        group: 'shared', // يسمح بسحب العناصر بين الأقسام (يمكن إزالته إذا أردت منع النقل بين الأقسام)
+                        animation: 150,
+                        handle: '.drag-handle', // مفتاح التعديل هنا: السحب من مقبض السحب فقط
+                        filter: '.add-item-btn', // لا تسمح بسحب زر الإضافة
+                        onEnd: async function (evt) {
+                            const newSectionEl = evt.to.closest('.column-wrapper');
+                            const oldSectionId = sectionId;
+                            const newSectionId = newSectionEl ? newSectionEl.dataset.sectionId : null;
+
+                            if (!newSectionId) return; 
+
+                            const oldIndex = evt.oldIndex;
+                            const newIndex = evt.newIndex;
+                            const itemId = evt.item.dataset.itemId;
+                            
+                            // 1. جلب بيانات القسم المحدثة
+                            const currentSectionData = await getSectionDataById(oldSectionId);
+                            if (!currentSectionData) return;
+                            
+                            let items = currentSectionData.items || [];
+                            const movedItem = items.find(item => item.id === itemId);
+                            if (!movedItem) return;
+                            
+                            // 2. معالجة النقل بين الأقسام
+                            if (oldSectionId !== newSectionId) {
+                                
+                                // حذف العنصر من القسم القديم
+                                items = items.filter(item => item.id !== itemId);
+                                await updateDoc(doc(db, sectionsPath, oldSectionId), { items: items });
+
+                                // إضافة العنصر للقسم الجديد بالترتيب الصحيح
+                                const newSectionData = await getSectionDataById(newSectionId);
+                                if (!newSectionData) return;
+                                
+                                let newItems = newSectionData.items || [];
+                                newItems.splice(newIndex, 0, movedItem); 
+                                await updateDoc(doc(db, sectionsPath, newSectionId), { items: newItems });
+                                
+                            } 
+                            // 3. معالجة الترتيب داخل نفس القسم
+                            else {
+                                // إعادة ترتيب المصفوفة محليا
+                                items.splice(oldIndex, 1);
+                                items.splice(newIndex, 0, movedItem);
+
+                                // حفظ الترتيب الجديد في قاعدة البيانات
+                                await updateDoc(doc(db, sectionsPath, sectionId), { items: items });
+                            }
+                        }
+                    });
+                } else if (list) {
+                    // تعطيل السحب لغير المحررين
+                    Sortable.create(list, {
+                        disabled: true
+                    });
+                }
+            });
+        }
+
 
         /**
          * (Update) معالجة تعديل عنوان القسم وحالة الرؤية
@@ -1315,7 +1423,7 @@
 
             try {
                  if (!db || !sectionsPath) {
-                      showAlert("خطأ في الاتصال لتعديل القسم.");
+                     showAlert("خطأ في الاتصال لتعديل القسم.");
                       return;
                  }
                 const sectionRef = doc(db, sectionsPath, sectionId);
@@ -1432,7 +1540,7 @@
 
             try {
                  if (!db || !sectionsPath) {
-                      showAlert("خطأ في الاتصال لإضافة العنصر.");
+                     showAlert("خطأ في الاتصال لإضافة العنصر.");
                       return;
                  }
                 const sectionRef = doc(db, sectionsPath, sectionId);
@@ -1453,7 +1561,7 @@
         async function handleEditItemFormSubmit(e) {
             e.preventDefault();
             const sectionId = editItemSectionIdInput ? editItemSectionIdInput.value : '';
-            const itemId = editItemIdInput ? editItemIdInput.value : '';
+            const itemId = editItemIdInput ? editItemItemIdInput.value : '';
             const newTitle = editItemTitleInput ? editItemTitleInput.value.trim() : '';
             const newLink = editItemLinkInput ? editItemLinkInput.value.trim() : '';
 
@@ -1461,7 +1569,7 @@
 
             try {
                  if (!db || !sectionsPath) {
-                      showAlert("خطأ في الاتصال لتعديل العنصر.");
+                     showAlert("خطأ في الاتصال لتعديل العنصر.");
                       return;
                  }
                 const sectionRef = doc(db, sectionsPath, sectionId);
@@ -1494,7 +1602,7 @@
          */
         async function deleteItem(sectionId, itemId) {
              if (!db || !sectionsPath) {
-                  showAlert("خطأ في الاتصال لحذف العنصر.");
+                 showAlert("خطأ في الاتصال لحذف العنصر.");
                   return;
              }
             const sectionRef = doc(db, sectionsPath, sectionId);
@@ -1532,7 +1640,7 @@
 
             try {
                  if (!db || !sectionsPath) {
-                      showAlert("خطأ في الاتصال لحذف القسم.");
+                     showAlert("خطأ في الاتصال لحذف القسم.");
                       return;
                  }
                 const sectionRef = doc(db, sectionsPath, sectionId);
@@ -1592,7 +1700,7 @@
                          </svg>
                     </button>
                     <button class="section-share-btn p-1 text-green-500 hover:text-green-600 transition-colors" title="مشاركة عبر واتساب">
-                       <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
+                       <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
                     </button>
                 </div>
             `;
@@ -1615,17 +1723,17 @@
              footerDiv.className = "p-4 bg-gray-100 border-t";
              if (userCanEditThisSection) {
                  footerDiv.innerHTML = `
-                     <button class="add-item-btn w-full bg-teal-600 text-white py-3 px-4 rounded-lg font-bold hover:bg-teal-700 transition duration-300 flex items-center justify-center gap-2" data-column-id="${sectionId}">
-                         <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                         إضافة عنصر
-                     </button>
+                      <button class="add-item-btn w-full bg-teal-600 text-white py-3 px-4 rounded-lg font-bold hover:bg-teal-700 transition duration-300 flex items-center justify-center gap-2" data-column-id="${sectionId}">
+                          <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                          إضافة عنصر
+                      </button>
                  `;
              } else {
                  footerDiv.innerHTML = `
-                     <button class="request-control-btn w-full bg-yellow-500 text-white py-3 px-4 rounded-lg font-bold hover:bg-yellow-600 transition duration-300 flex items-center justify-center gap-2" data-section-id="${sectionId}" data-section-title="${section.title || ''}">
-                         <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg>
-                         طلب التحكم في القسم
-                     </button>
+                      <button class="request-control-btn w-full bg-yellow-500 text-white py-3 px-4 rounded-lg font-bold hover:bg-yellow-600 transition duration-300 flex items-center justify-center gap-2" data-section-id="${sectionId}" data-section-title="${section.title || ''}">
+                          <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg>
+                          طلب التحكم في القسم
+                      </button>
                  `;
              }
              sectionDiv.appendChild(footerDiv);
@@ -1653,29 +1761,38 @@
             const itemTypeIcon = (item.type === 'link')
                 ? `<svg class="w-6 h-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>`
                 : `<svg class="w-6 h-6 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625a3.375 3.375 0 00-3.375 3.375v11.25a3.375 3.375 0 003.375 3.375h12.75a3.375 3.375 0 003.375-3.375V12M10.5 1.5H18" /></svg>`;
+                
+            // (جديد) مقبض السحب والإفلات
+            const dragHandle = canEdit ? `
+                <div class="drag-handle text-teal-800 hover:bg-gray-100">
+                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M12 17.25h8.25"/></svg>
+                </div>
+            ` : '';
+
 
             itemDiv.innerHTML = `
-                <div class="flex items-center gap-3 flex-grow min-w-0"> 
+                 <div class="flex items-center gap-3 flex-grow min-w-0"> 
                     ${itemTypeIcon}
                     <a href="${href}" ${target} ${download} class="font-semibold text-gray-800 hover:text-teal-600 transition-colors flex-grow min-w-0">
                         <span class="block truncate">${formattedTitle || 'عنصر بدون عنوان'}</span>
                     </a>
-                </div>
+                 </div>
 
-                <div class="flex items-center gap-1 flex-shrink-0 ml-2"> 
-                    <button class="item-share-btn p-1 text-gray-400 hover:text-green-600 transition-colors" title="مشاركة عبر واتساب">
-                       <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
-                    </button>
+                 <div class="flex items-center gap-1 flex-shrink-0 ml-2"> 
+                     ${dragHandle}
+                     <button class="item-share-btn p-1 text-green-500 hover:text-green-600 transition-colors" title="مشاركة عبر واتساب">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
+                     </button>
 
                     ${canEdit ? ` 
-                        <button class="item-edit-btn p-1 text-gray-400 hover:text-blue-700 transition-colors" title="تعديل العنصر">
-                            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg>
-                        </button>
-                        <button class="item-delete-btn p-1 text-gray-400 hover:text-red-700 transition-colors" title="حذف العنصر">
-                            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
-                        </button>
-                    ` : ''}
-                </div>
+                         <button class="item-edit-btn p-1 text-blue-500 hover:text-blue-700 transition-colors" title="تعديل العنصر">
+                             <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg>
+                         </button>
+                         <button class="item-delete-btn p-1 text-red-500 hover:text-red-700 transition-colors" title="حذف العنصر">
+                             <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
+                         </button>
+                     ` : ''}
+                 </div>
             `;
             return itemDiv;
         }
@@ -1726,73 +1843,78 @@
             if (sectionsContainer) {
                  sectionsContainer.addEventListener('click', async (e) => {
 
-                    const requestControlBtn = e.target.closest('.request-control-btn');
-                    if (requestControlBtn && !isUserAdmin) { 
-                        const sectionId = requestControlBtn.dataset.sectionId;
-                        const sectionTitle = requestControlBtn.dataset.sectionTitle;
-                        if (sectionId && sectionTitle) {
-                           await requestSectionControl(sectionId, sectionTitle);
-                        }
-                        return;
-                    }
-
-                    const deleteItemBtn = e.target.closest('.item-delete-btn');
-                    if (deleteItemBtn) {
-                        const sectionEl = deleteItemBtn.closest('.column-wrapper');
-                        const itemEl = deleteItemBtn.closest('.item-card');
-                        if (sectionEl && itemEl) {
-                           const sectionId = sectionEl.dataset.sectionId;
-                           const itemId = itemEl.dataset.itemId;
-                           deleteItem(sectionId, itemId);
-                        }
-                        return;
-                    }
-
-                    const deleteSectionBtn = e.target.closest('.section-delete-btn');
-                    if (deleteSectionBtn && isAdmin) {
-                        const sectionEl = deleteSectionBtn.closest('.column-wrapper');
-                        if (sectionEl) {
-                           const sectionId = sectionEl.dataset.sectionId;
-                           deleteSection(sectionId);
-                        }
-                        return;
-                    }
-
-                    const printSectionBtn = e.target.closest('.section-print-btn');
-                    if (printSectionBtn) {
-                        const sectionEl = printSectionBtn.closest('.column-wrapper');
-                        if (sectionEl) {
-                           await generatePdfForSections(sectionEl);
-                        }
-                        return;
-                    }
-
-                    const shareSectionBtn = e.target.closest('.section-share-btn');
-                    if (shareSectionBtn) {
-                        const sectionEl = shareSectionBtn.closest('.column-wrapper');
-                        if (sectionEl) {
-                             shareSectionViaWhatsApp(sectionEl.dataset.sectionId);
-                        }
-                        return;
-                    }
-
-                     const shareItemBtn = e.target.closest('.item-share-btn');
-                     if (shareItemBtn) {
-                          const itemEl = shareItemBtn.closest('.item-card');
-                           if (itemEl) {
-                                const title = itemEl.querySelector('a span')?.textContent.trim() || '';
-                                const url = itemEl.querySelector('a')?.href || '';
-                                shareItemViaWhatsApp(title, url);
-                           }
+                     const requestControlBtn = e.target.closest('.request-control-btn');
+                     if (requestControlBtn && !isUserAdmin) { 
+                         const sectionId = requestControlBtn.dataset.sectionId;
+                         const sectionTitle = requestControlBtn.dataset.sectionTitle;
+                         if (sectionId && sectionTitle) {
+                            await requestSectionControl(sectionId, sectionTitle);
+                         }
                          return;
                      }
+
+                     const deleteItemBtn = e.target.closest('.item-delete-btn');
+                     if (deleteItemBtn) {
+                         const sectionEl = deleteItemBtn.closest('.column-wrapper');
+                         const itemEl = deleteItemBtn.closest('.item-card');
+                         if (sectionEl && itemEl) {
+                            const sectionId = sectionEl.dataset.sectionId;
+                            const itemId = itemEl.dataset.itemId;
+                            deleteItem(sectionId, itemId);
+                         }
+                         return;
+                     }
+
+                     const deleteSectionBtn = e.target.closest('.section-delete-btn');
+                     if (deleteSectionBtn && isAdmin) {
+                         const sectionEl = deleteSectionBtn.closest('.column-wrapper');
+                         if (sectionEl) {
+                            const sectionId = sectionEl.dataset.sectionId;
+                            deleteSection(sectionId);
+                         }
+                         return;
+                     }
+
+                     const printSectionBtn = e.target.closest('.section-print-btn');
+                     if (printSectionBtn) {
+                         const sectionEl = printSectionBtn.closest('.column-wrapper');
+                         if (sectionEl) {
+                            await generatePdfForSections(sectionEl);
+                         }
+                         return;
+                     }
+
+                     const shareSectionBtn = e.target.closest('.section-share-btn');
+                     if (shareSectionBtn) {
+                         const sectionEl = shareSectionBtn.closest('.column-wrapper');
+                         if (sectionEl) {
+                             shareSectionViaWhatsApp(sectionEl.dataset.sectionId);
+                         }
+                         return;
+                     }
+
+                      const shareItemBtn = e.target.closest('.item-share-btn');
+                      if (shareItemBtn) {
+                          const itemEl = shareItemBtn.closest('.item-card');
+                           if (itemEl) {
+                                 const title = itemEl.querySelector('a span')?.textContent.trim() || '';
+                                 const url = itemEl.querySelector('a')?.href || '';
+                                 // تأكد من أن هناك رابط صالح للمشاركة
+                                 if (itemEl.querySelector('a')?.getAttribute('target')) {
+                                    shareItemViaWhatsApp(title, url);
+                                 } else {
+                                     showAlert("لا يمكن مشاركة هذا العنصر لأنه لا يحتوي على رابط مباشر.");
+                                 }
+                           }
+                           return;
+                      }
 
                  });
             }
         }
         
         /**
-         * (جديد ومُعدَّل) دالة حذف جميع الدردشات (للمدير)
+         * (جديد ومُعدَّل) دالة حذف جميع الدردشات (للمدير)
          */
         window.deleteAllChats = async function() {
             if (!isUserAdmin) {
@@ -1900,9 +2022,9 @@
              const items = sectionData.items || [];
              if (items.length > 0) {
                  items.forEach(item => {
-                     if (item.title && item.url && item.type === 'link') {
-                         message += `${item.title}\n${item.url}\n\n`;
-                     }
+                      if (item.title && item.url && item.type === 'link') {
+                          message += `${item.title}\n${item.url}\n\n`;
+                      }
                  });
              } else {
                  message += "_لا توجد عناصر في هذا القسم._"; 
@@ -1973,22 +2095,22 @@
 
              if (Array.isArray(itemChunk) && itemChunk.length > 0) {
                  for (const item of itemChunk) {
-                     if (typeof item !== 'object' || item === null) continue;
+                      if (typeof item !== 'object' || item === null) continue;
 
-                     const itemDiv = document.createElement('div');
-                     itemDiv.className = 'print-item';
+                      const itemDiv = document.createElement('div');
+                      itemDiv.className = 'print-item';
 
-                     const textDiv = document.createElement('div');
-                     textDiv.className = 'print-item-text';
-                     textDiv.innerHTML = `<div class="print-item-title">${item.title || 'عنصر بدون عنوان'}</div>`; 
+                      const textDiv = document.createElement('div');
+                      textDiv.className = 'print-item-text';
+                      textDiv.innerHTML = `<div class="print-item-title">${item.title || 'عنصر بدون عنوان'}</div>`; 
 
-                     const qrDiv = document.createElement('div');
-                     qrDiv.className = 'print-item-qr';
-                     qrDiv.dataset.url = (item.type === 'link' && item.url) ? item.url : '';
+                      const qrDiv = document.createElement('div');
+                      qrDiv.className = 'print-item-qr';
+                      qrDiv.dataset.url = (item.type === 'link' && item.url) ? item.url : '';
 
-                     itemDiv.appendChild(textDiv);
-                     itemDiv.appendChild(qrDiv);
-                     listDiv.appendChild(itemDiv);
+                      itemDiv.appendChild(textDiv);
+                      itemDiv.appendChild(qrDiv);
+                      listDiv.appendChild(itemDiv);
                  }
              } else {
                  listDiv.innerHTML = '<p style="padding: 10px; text-align: center;">لا توجد عناصر في هذا القسم.</p>';
@@ -2012,12 +2134,12 @@
                 const url = qrDiv.dataset.url;
                 if (url) {
                    try { 
-                        new QRCode(qrDiv, {
-                            text: url,
-                            width: 80,
-                            height: 80,
-                            correctLevel: QRCode.CorrectLevel.L
-                        });
+                         new QRCode(qrDiv, {
+                             text: url,
+                             width: 80,
+                             height: 80,
+                             correctLevel: QRCode.CorrectLevel.L
+                         });
                     } catch(qrError) {
                         qrDiv.textContent = "[خطأ QR]"; 
                     }
@@ -2067,37 +2189,37 @@
 
             try {
                  const sectionsToPrintElements = specificSectionElement
-                     ? [specificSectionElement]
-                     : (sectionsContainer ? Array.from(sectionsContainer.querySelectorAll('.column-wrapper')) : []); 
+                      ? [specificSectionElement]
+                      : (sectionsContainer ? Array.from(sectionsContainer.querySelectorAll('.column-wrapper')) : []); 
 
 
                  const sectionsData = [];
                  for (const el of sectionsToPrintElements) {
-                     if (el && el.dataset && el.dataset.sectionId) {
-                         const data = await getSectionDataById(el.dataset.sectionId);
-                         if (data) sectionsData.push(data);
-                     }
+                      if (el && el.dataset && el.dataset.sectionId) {
+                          const data = await getSectionDataById(el.dataset.sectionId);
+                          if (data) sectionsData.push(data);
+                      }
                  }
 
                  let isFirstPage = true;
 
                  for (const section of sectionsData) {
-                     const items = (section && Array.isArray(section.items)) ? section.items : [];
-                     const sectionTitle = (section && section.title) ? section.title : 'قسم بدون عنوان';
+                      const items = (section && Array.isArray(section.items)) ? section.items : [];
+                      const sectionTitle = (section && section.title) ? section.title : 'قسم بدون عنوان';
 
-                     const itemChunks = chunkArray(items, 5); 
+                      const itemChunks = chunkArray(items, 5); 
 
-                     if (itemChunks.length === 0) {
-                         if (!isFirstPage) doc.addPage();
-                         await createPdfPageFromHTML(doc, sectionTitle, []);
-                         isFirstPage = false;
-                     } else {
-                         for (const chunk of itemChunks) {
-                             if (!isFirstPage) doc.addPage();
-                             await createPdfPageFromHTML(doc, sectionTitle, chunk);
-                             isFirstPage = false;
-                         }
-                     }
+                      if (itemChunks.length === 0) {
+                           if (!isFirstPage) doc.addPage();
+                           await createPdfPageFromHTML(doc, sectionTitle, []);
+                           isFirstPage = false;
+                      } else {
+                           for (const chunk of itemChunks) {
+                                if (!isFirstPage) doc.addPage();
+                                await createPdfPageFromHTML(doc, sectionTitle, chunk);
+                                isFirstPage = false;
+                           }
+                      }
                  }
 
                  if (!isFirstPage) { 
@@ -2514,7 +2636,7 @@
             
              const activeTab = document.getElementById(`chat-tab-${chatCurrentChat.id.replace(':', '-')}`);
              if (activeTab && chatMessageView.classList.contains('hidden')) {
-                activeTab.classList.add('bg-blue-50', 'border-r-4', 'border-blue-500');
+                 activeTab.classList.add('bg-blue-50', 'border-r-4', 'border-blue-500');
              }
         }
 
@@ -2587,15 +2709,15 @@
                 const q = query(chatPaths.privateChatCollection(chatId), orderBy("timestamp", "desc"), limit(1));
                 chatMessageListeners[`unread-${chatId}`] = onSnapshot(q, (snapshot) => {
                      if (snapshot.docChanges().length > 0 && snapshot.docChanges()[0].type === 'added') {
-                        const newMessage = snapshot.docChanges()[0].doc.data();
-                        if (newMessage.userId !== userId && chatCurrentChat.id !== chatId) {
-                            const now = Date.now();
-                            const msgTime = newMessage.timestamp?.toDate().getTime() || now;
-                            if ((now - msgTime) < 10000) {
-                                incrementChatUnreadCount(chatId);
-                            }
-                        }
-                    }
+                          const newMessage = snapshot.docChanges()[0].doc.data();
+                          if (newMessage.userId !== userId && chatCurrentChat.id !== chatId) {
+                              const now = Date.now();
+                              const msgTime = newMessage.timestamp?.toDate().getTime() || now;
+                              if ((now - msgTime) < 10000) {
+                                  incrementChatUnreadCount(chatId);
+                              }
+                          }
+                     }
                 });
             });
         }
@@ -2659,29 +2781,29 @@
         <nav class="bg-white shadow-md p-3 sticky top-0 z-40">
             <div class="container mx-auto flex justify-center items-center gap-2 md:gap-4 flex-wrap">
                 <div class="relative hidden"> 
-                     <button id="admin-manage-btn" class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">
-                         <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM12 15a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
-                         إدارة 
-                     </button>
-                 </div>
-                 <div class="relative hidden"> 
-                     <button id="admin-perms-btn" class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-yellow-600 transition duration-300">
-                         <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                         الطلبات
-                     </button>
-                     <span id="admin-perms-badge" class="notification-badge hidden">0</span>
-                 </div>
-                 <div class="relative hidden"> 
-                     <button id="add-section-btn" class="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-green-600 transition duration-300">
-                         <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                         إضافة 
-                     </button>
-                 </div>
-                 
-                 <button id="delete-all-chat-btn" class="hidden flex items-center gap-2 bg-red-700 text-white px-4 py-2 rounded-lg shadow-md hover:bg-red-800 transition duration-300" onclick="deleteAllChats()">
-                     <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
-                     حذف جميع الدردشات
-                 </button>
+                    <button id="admin-manage-btn" class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">
+                        <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM12 15a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
+                        إدارة 
+                    </button>
+                </div>
+                <div class="relative hidden"> 
+                    <button id="admin-perms-btn" class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-yellow-600 transition duration-300">
+                        <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        الطلبات
+                    </button>
+                    <span id="admin-perms-badge" class="notification-badge hidden">0</span>
+                </div>
+                <div class="relative hidden"> 
+                    <button id="add-section-btn" class="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-green-600 transition duration-300">
+                        <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        إضافة 
+                    </button>
+                </div>
+                
+                <button id="delete-all-chat-btn" class="hidden flex items-center gap-2 bg-red-700 text-white px-4 py-2 rounded-lg shadow-md hover:bg-red-800 transition duration-300">
+                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
+                    حذف جميع الدردشات
+                </button>
 
                 <button id="print-sections-btn" class="hidden flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-gray-700 transition duration-300">
                     <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -2714,7 +2836,7 @@
             <svg class="w-8 h-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443h2.88a1.875 1.875 0 001.875-1.875V16.5m-13.5-3.825V6.375c0-1.6 1.123-2.994 2.707-3.227 1.087.16 2.185.283 3.293.369V3l4.076 4.076a1.526 1.526 0 011.037.443h2.88a1.875 1.875 0 011.875 1.875v1.65M16.5 12V6.375m0 5.625v3.825m0 0v3.75m-13.5-3.75h13.5" />
             </svg>
-            <span id="chat-total-badge" class="hidden">0</span>
+            <span id="chat-total-badge" class="hidden absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">0</span>
         </button>
     </div>
 
@@ -2752,9 +2874,9 @@
             
             <div id="chat-user-info" class="p-3 border-b text-sm">
                 <p>مرحباً، <span id="chat-username-display" class="font-semibold">...</span></p>
-                <button id="delete-all-chat-btn" class="hidden text-red-500 text-xs font-semibold mt-1 hover:text-red-700" onclick="deleteAllChats()">
-                    [حذف جميع سجلات الدردشة]
-                </button>
+                <button id="delete-all-chat-btn-in-chat-window" class="hidden text-red-500 text-xs font-semibold mt-1 hover:text-red-700" onclick="deleteAllChats()">
+                     [حذف جميع سجلات الدردشة]
+                 </button>
             </div>
 
             <div class="flex-grow overflow-y-auto">
@@ -2794,11 +2916,12 @@
             <div id="chat-messages" class="flex-1 p-3 overflow-y-auto bg-gray-50 space-y-3">
                 </div>
             
-            <form id="message-form" class="p-3 border-t flex gap-2 bg-white">
+            <form id="message-form" class="p-3 border-t flex gap-2 bg-white relative">
                 <input type="text" id="message-input" placeholder="اكتب رسالتك..." autocomplete="off"
-                       class="flex-1 px-3 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        class="flex-1 px-3 py-2 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 relative z-0">
+                
                 <button type="submit"
-                        class="bg-blue-500 text-white w-10 h-10 rounded-full font-semibold hover:bg-blue-600 flex-shrink-0 flex items-center justify-center">
+                         class="bg-blue-500 text-white w-10 h-10 rounded-full font-semibold hover:bg-blue-600 flex-shrink-0 flex items-center justify-center relative z-10">
                     <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.875L6 12z" />
                     </svg>
