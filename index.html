@@ -224,12 +224,23 @@
     <script type="module">
         // استيراد مكتبات Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, 
+             signInWithEmailAndPassword, // تم إضافته
+             createUserWithEmailAndPassword, // تم إضافته
+             onAuthStateChanged, 
+             signOut 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, doc, collection, addDoc, onSnapshot, query, 
             updateDoc, arrayUnion, getDoc, setDoc, deleteDoc, getDocs, 
             where, serverTimestamp, arrayRemove, orderBy, limit, writeBatch
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // *******************************************************************
+        // ملاحظة هامة: إذا لم تظهر الأقسام بعد الدخول، يرجى التأكد من أن قواعد 
+        // أمان Firestore تسمح للمستخدمين المصادق عليهم (request.auth != null)
+        // بقراءة وكتابة مجموعات 'users' و 'sections'.
+        // *******************************************************************
 
         // --- 1. إعدادات Firebase ---
         
@@ -243,11 +254,9 @@
           appId: "1:240292137665:web:02597426d8288ca0c16240"
         };
         
-        // --- بيانات المدير الثابتة (يجب تغييرها) ---
-        const ADMIN_USERNAME = "مدير"; // غيّر هذا الاسم
-        const ADMIN_PASSWORD = "منصتنا"; // غيّر كلمة المرور هذه
-        const ADMIN_ROLE = "admin";
-        const ADMIN_SIGNATURE = "rashedon_admin_key"; // توقيع يُحفظ في localStorage
+        // --- بيانات المدير (سيتم إدارتها عبر قاعدة بيانات المستخدمين) ---
+        // تم إلغاء ثوابت ADMIN_USERNAME, ADMIN_PASSWORD
+        const DEFAULT_ADMIN_EMAIL = "admin@rashedon.sa"; // الايميل الافتراضي للمدير
         // ------------------------------
         
         const CHAT_APP_ID = 'rashedon-app';
@@ -265,8 +274,15 @@
 
         // متغيرات لحالة المستخدم (المنصة)
         let currentUserName = null; // اسم المستخدم (من تسجيل الدخول)
+        let currentUserEmail = null; // البريد الإلكتروني
         let currentUserRole = 'viewer';
         let isUserAdmin = false;
+        let isAppInitialized = false; // (جديد) لمنع التمهيد المتعدد
+        
+        // (تم تصحيح الخطأ هنا) تعريف المتغيرات عالميا (Global)
+        const adminControls = ['add-section-btn', 'admin-manage-btn', 'admin-perms-btn'];
+        const generalControls = ['print-sections-btn', 'logout-btn'];
+
 
         // متغيرات لإدارة المستمعين (Listeners)
         let permissionRequestsUnsubscribe = null; 
@@ -296,10 +312,15 @@
         let sectionsContainer;
         let userNameDisplay, userAvatar;
         let permsBtnBadge;
+        let initialLoadingMessage; 
+        
+        // (جديد) متغيرات عناصر الدردشة التي لم يتم تعريفها كـ let
+        let chatWindow, chatListView, chatMessageView, closeChatBtn1, closeChatBtn2, chatBackBtn;
+        let chatUsernameDisplay, chatUsersListDiv, chatMessagesDiv, messageForm, messageInput, chatTitle, chatSubtitle;
         
         // نوافذ (المنصة)
         let loginModal, loginForm, loginError;
-        let userPasswordInput; // حقل كلمة المرور الجديد
+        // تم إزالة userPasswordInput
         let addSectionModal, addSectionModalContent, addSectionForm, closeSectionModalBtn, cancelSectionModalBtn;
         let addItemModal, modalContent, closeModalBtn, cancelModalBtn, addItemForm, columnIdInput, itemTypeInput;
         let editSectionModal, editSectionForm, editSectionTitleInput, editSectionIdInput;
@@ -311,20 +332,10 @@
         let currentEditorsList, currentEditorsContainer; 
         
         // (جديد) أزرار تسجيل الدخول/الخروج
-        let logoutBtn, loginAdminBtn;
+        let logoutBtn, loginAdminBtn; // تم الإبقاء على اسم الزر ولكن وظيفته تغيرت لفتح المودال فقط
         let chatTotalBadge; // شارة الدردشة العائمة
         let deleteAllChatBtn; // زر حذف جميع الدردشات
-
-        // (جديد) عناصر نافذة الدردشة
-        let chatWindow, chatListView, chatMessageView, chatBackBtn, closeChatBtn1, closeChatBtn2;
-        let chatUsernameDisplay, chatUsersListDiv;
-        let chatMessagesDiv, messageForm, messageInput;
-        let chatTitle, chatSubtitle;
         
-        // أزرار التحكم (للمدير)
-        const adminControls = ['add-section-btn', 'admin-manage-btn', 'admin-perms-btn'];
-        // الأزرار العامة
-        const generalControls = ['print-sections-btn', 'logout-btn'];
 
         /**
          * =============================================
@@ -338,6 +349,7 @@
             userAvatar = document.getElementById('user-avatar');
             pdfSpinnerModal = document.getElementById('pdf-spinner-modal');
             permsBtnBadge = document.getElementById('admin-perms-badge'); 
+            initialLoadingMessage = document.getElementById('initial-loading-message'); 
             
             // (جديد) عناصر أزرار تسجيل الدخول/الخروج
             logoutBtn = document.getElementById('logout-btn');
@@ -349,88 +361,208 @@
             loginModal = document.getElementById('login-modal');
             loginForm = document.getElementById('login-form');
             loginError = document.getElementById('login-error');
-            userPasswordInput = document.getElementById('user-password-input'); // عنصر كلمة المرور
 
-            // محاولة التحقق من الاسم المسجل أو توقيع المدير
-            currentUserName = localStorage.getItem('rashedonUserName');
-            isUserAdmin = localStorage.getItem(ADMIN_SIGNATURE) === 'true'; // التحقق من توقيع المدير
+            // === منطق التشغيل الجديد: يجب أن يتم تسجيل الدخول أولا ===
+            
+            // تهيئة Firebase مبكراً
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            // تحديد مراجع المجموعات
+            sectionsCollectionRef = collection(db, sectionsPath);
+            usersCollectionRef = collection(db, usersPath);
+            permissionRequestsCollectionRef = collection(db, permissionRequestsPath);
 
-            if (currentUserName || isUserAdmin) {
-                // إذا كان الاسم موجوداً أو المدير مسجلاً، قم بتهيئة Firebase وابدأ التطبيق
-                console.log("الاسم أو توقيع المدير موجود.");
-                initFirebase();
-            } else {
-                // إذا لم يكن الاسم أو التوقيع موجوداً، أظهر نافذة تسجيل الدخول
-                console.log("الاسم غير موجود، إظهار نافذة الدخول.");
-                if (loginModal) loginModal.classList.remove('hidden'); 
-            }
+            // بدء مراقبة حالة المصادقة
+            listenToAuthChanges();
 
             // ربط حدث إرسال نموذج تسجيل الدخول
             if (loginForm) loginForm.addEventListener('submit', handleLoginSubmit);
             
-            // ربط زر تسجيل دخول المدير لإظهار النافذة
+            // ربط زر تسجيل الدخول/الخروج
             if (loginAdminBtn) {
                  loginAdminBtn.addEventListener('click', () => {
-                    // مسح حقل كلمة المرور فقط لتسهيل دخول المشاهد
-                    if (userPasswordInput) userPasswordInput.value = '';
-                    if (loginError) loginError.classList.add('hidden');
-                    if (loginModal) loginModal.classList.remove('hidden');
+                     if (loginError) loginError.classList.add('hidden');
+                     if (loginModal) loginModal.classList.remove('hidden');
                  });
             }
+            
+            // ربط زر التسجيل (New)
+            const registerBtn = document.getElementById('register-new-user-btn');
+            if (registerBtn) registerBtn.addEventListener('click', handleRegistration);
         });
+        
+        /**
+         * الاستماع لتغييرات المصادقة
+         */
+        function listenToAuthChanges() {
+             onAuthStateChanged(auth, async (user) => {
+                 if (user) {
+                     userId = user.uid;
+                     currentUserEmail = user.email || 'غير مسجل';
+                     
+                     // 1. إخفاء رسالة التحميل وعرض واجهة الدخول إذا كانت مفتوحة
+                     if (initialLoadingMessage) initialLoadingMessage.classList.add('hidden');
+
+                     // 2. جلب بيانات المستخدم من Firestore
+                     const userDocRef = doc(db, usersPath, userId);
+                     const userDocSnap = await getDoc(userDocRef);
+                     
+                     if (userDocSnap.exists()) {
+                         const userData = userDocSnap.data();
+                         currentUserName = userData.name || currentUserEmail;
+                         currentUserRole = userData.role || 'viewer';
+                         isUserAdmin = (currentUserRole === 'admin');
+                     } else {
+                          // إذا كان المستخدم مصدقًا في Auth ولكنه غير موجود في Firestore،
+                          // يجب إنشاء وثيقة له أولاً لتجنب الأخطاء في باقي التطبيق
+                          const name = user.displayName || currentUserEmail.split('@')[0] || 'مستخدم جديد';
+                          const userData = {
+                             name: name,
+                             email: currentUserEmail,
+                             role: 'viewer',
+                             createdAt: serverTimestamp()
+                          };
+                          await setDoc(userDocRef, userData, { merge: true });
+                          
+                          currentUserName = name; 
+                          currentUserRole = 'viewer';
+                          isUserAdmin = false;
+                     }
+
+                     if (loginModal) loginModal.classList.add('hidden');
+                     
+                     // (تعديل) نضمن أن الوظيفة تبدأ مرة واحدة فقط
+                     if (!isAppInitialized) {
+                         initializeAppLogic(currentUserName);
+                         isAppInitialized = true;
+                     }
+
+
+                     if (isUserAdmin) {
+                         listenForPermissionRequests();
+                     }
+                     updateUserPresence(); // لتسجيل التواجد
+                     
+                 } else {
+                      // المستخدم غير مسجل الدخول
+                     userId = '';
+                     currentUserName = 'زائر';
+                     currentUserEmail = null;
+                     currentUserRole = 'viewer';
+                     isUserAdmin = false;
+                     isAppInitialized = false; // إعادة تعيين حالة التمهيد
+                     
+                     updateUIForUser(currentUserName, false);
+                     
+                     // إظهار رسالة التحميل الأولية (للتأكد من أن onAuthStateChanged يعمل)
+                     if (initialLoadingMessage) initialLoadingMessage.classList.remove('hidden');
+                     
+                     // عرض شاشة الدخول إذا لم يكن المستخدم مصادقًا
+                     if (loginModal) loginModal.classList.remove('hidden');
+                 }
+             });
+        }
+
 
         /**
-         * معالجة إرسال نموذج تسجيل الدخول (بالاسم وكلمة المرور المميزة)
+         * معالجة إرسال نموذج تسجيل الدخول (بالبريد الإلكتروني وكلمة المرور)
          */
         async function handleLoginSubmit(e) {
             e.preventDefault();
-            const nameInput = document.getElementById('user-name-input');
+            const emailInput = document.getElementById('user-email-input');
             const passwordInput = document.getElementById('user-password-input');
-            if (!nameInput || !passwordInput) return;
+            if (!emailInput || !passwordInput) return;
             
-            const name = nameInput.value.trim();
+            const email = emailInput.value.trim();
             const password = passwordInput.value.trim();
 
-            if (!name) {
-                showLoginError("الرجاء إدخال اسمك للمتابعة.");
+            if (!email || !password) {
+                showLoginError("الرجاء إدخال البريد الإلكتروني وكلمة المرور.");
                 return;
             }
             
-            // 1. منطق المدير المميز
-            if (name === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-                currentUserRole = ADMIN_ROLE;
-                isUserAdmin = true;
-                localStorage.setItem(ADMIN_SIGNATURE, 'true'); // حفظ توقيع المدير
-                localStorage.setItem('rashedonUserName', name);
+            // محاولة تسجيل الدخول
+            try {
+                // (جديد) إظهار رسالة تحميل خفيفة أثناء الاتصال
+                showLoginError("جاري تسجيل الدخول..."); 
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
                 
+                // إذا نجح الدخول، فإن onAuthStateChanged سيتولى باقي الأمور
                 if (loginError) loginError.classList.add('hidden');
-                if (loginModal) loginModal.classList.add('hidden');
                 
-                // إعادة تهيئة/تحديث الحالة عبر تسجيل دخول مجهول جديد
-                await initFirebase(true); 
-                showAlert("تم تسجيل الدخول كمدير بنجاح.", 'success');
-                return;
-            } 
+            } catch (error) {
+                let errorMessage;
+                switch (error.code) {
+                    case 'auth/user-not-found':
+                    case 'auth/wrong-password':
+                        errorMessage = "خطأ في البريد الإلكتروني أو كلمة المرور.";
+                        break;
+                    case 'auth/invalid-email':
+                        errorMessage = "تنسيق البريد الإلكتروني غير صحيح.";
+                        break;
+                    case 'auth/too-many-requests':
+                        errorMessage = "تم حظر الدخول مؤقتاً بسبب محاولات متكررة فاشلة.";
+                        break;
+                    default:
+                        errorMessage = `فشل تسجيل الدخول. (${error.message})`;
+                }
+                showLoginError(errorMessage);
+            }
+        }
+        
+        /**
+         * معالجة تسجيل مستخدم جديد
+         */
+        async function handleRegistration() {
+            const nameInput = document.getElementById('user-name-input');
+            const emailInput = document.getElementById('user-email-input');
+            const passwordInput = document.getElementById('user-password-input');
             
-            // 2. منطق المشاهد العادي (أو فشل المدير)
-            else if (password) {
-                 // فشل في تسجيل دخول المدير
-                 showLoginError("اسم المستخدم أو كلمة المرور الخاصة بالمدير غير صحيحة.");
+            if (!nameInput || !emailInput || !passwordInput) return;
+            
+            const name = nameInput.value.trim();
+            const email = emailInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            if (!name || !email || password.length < 6) {
+                 showLoginError("الرجاء إدخال اسمك وبريدك، وتأكد من أن كلمة المرور 6 أحرف على الأقل.");
                  return;
-            } else {
-                 // تسجيل دخول المشاهد
-                 currentUserRole = 'viewer';
-                 isUserAdmin = false;
-                 localStorage.removeItem(ADMIN_SIGNATURE);
-                 localStorage.setItem('rashedonUserName', name);
+            }
+            
+            try {
+                 // (جديد) إظهار رسالة تحميل خفيفة أثناء الاتصال
+                 showLoginError("جاري إنشاء الحساب..."); 
+                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                 const newUser = userCredential.user;
                  
+                 // تسجيل بيانات المستخدم في Firestore
+                 const role = (email === DEFAULT_ADMIN_EMAIL) ? 'admin' : 'viewer';
+                 
+                 await setDoc(doc(db, usersPath, newUser.uid), {
+                     name: name,
+                     email: email,
+                     role: role,
+                     createdAt: serverTimestamp()
+                 });
+
+                 showAlert("تم إنشاء الحساب بنجاح! يمكنك الآن تسجيل الدخول.", 'success');
                  if (loginError) loginError.classList.add('hidden');
-                 if (loginModal) loginModal.classList.add('hidden');
                  
-                 // إعادة تهيئة/تحديث الحالة عبر تسجيل دخول مجهول جديد
-                 await initFirebase(true);
-                 showAlert(`تم تسجيل الدخول كـ مشاهد باسم: ${name}`, 'info');
-                 return;
+            } catch (error) {
+                 let errorMessage;
+                 switch (error.code) {
+                     case 'auth/email-already-in-use':
+                         errorMessage = "هذا البريد الإلكتروني مستخدم بالفعل. هل نسيت كلمة المرور؟";
+                         break;
+                     case 'auth/weak-password':
+                         errorMessage = "كلمة المرور ضعيفة جداً (يجب أن تكون 6 أحرف على الأقل).";
+                         break;
+                     default:
+                         errorMessage = `فشل التسجيل. (${error.message})`;
+                 }
+                 showLoginError(errorMessage);
             }
         }
 
@@ -447,123 +579,6 @@
              }
         }
 
-        /**
-         * تهيئة Firebase وتسجيل الدخول (المجهول)
-         * @param {boolean} forceReload - لإجبار إعادة التحميل بعد تسجيل الدخول اليدوي
-         */
-        async function initFirebase(forceReload = false) {
-            try {
-                if (!app) {
-                    app = initializeApp(firebaseConfig);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
-                    // setLogLevel('error'); // يمكنك تفعيل هذا لتقليل سجلات Firebase في الإنتاج
-                }
-
-                // تحديد مراجع المجموعات
-                sectionsCollectionRef = collection(db, sectionsPath);
-                usersCollectionRef = collection(db, usersPath);
-                permissionRequestsCollectionRef = collection(db, permissionRequestsPath);
-
-                // ===============================================
-                // (جديد) منطق التحقق الفوري والتشغيل السريع
-                // ===============================================
-                
-                // تحديد الحالة المحلية
-                const localAdminStatus = localStorage.getItem(ADMIN_SIGNATURE) === 'true';
-                const localUserName = localStorage.getItem('rashedonUserName');
-
-                // 1. إذا كان توقيع المدير أو الاسم موجوداً محلياً (لتشغيل الواجهة فوراً)
-                if (localAdminStatus || localUserName) {
-                    currentUserRole = localAdminStatus ? ADMIN_ROLE : 'viewer';
-                    currentUserName = localUserName || ADMIN_USERNAME;
-                    isUserAdmin = localAdminStatus;
-                    
-                    // تشغيل منطق الواجهة فوراً إذا كان الاسم موجوداً محليا
-                    if (localUserName) {
-                        initializeAppLogic(currentUserName);
-                    }
-                }
-                
-                // 2. معالجة حالة forceReload (بعد تسجيل دخول/خروج يدوي)
-                if (forceReload) {
-                     // تسجيل الخروج ثم الدخول كمجهول لبدء دورة Auth جديدة
-                     if (auth.currentUser) await signOut(auth);
-                     await signInAnonymously(auth);
-                     return;
-                }
-                
-                // ===============================================
-
-                // مراقبة حالة تسجيل الدخول (تبقى كآلية لضمان الـ UID وتحديث Firestore)
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid; 
-                        
-                        // نستخدم الحالة المحلية التي تم تحديدها بالفعل في الخطوة 1
-                        const finalRole = localStorage.getItem(ADMIN_SIGNATURE) === 'true' ? ADMIN_ROLE : 'viewer';
-                        const finalName = localStorage.getItem('rashedonUserName') || 'مشاهد';
-                        
-                        // إذا كان المستخدم جديداً (لم يُدخل اسمه بعد)، نعرض النافذة
-                        if (!localStorage.getItem('rashedonUserName')) {
-                            if (loginModal) loginModal.classList.remove('hidden');
-                            updateUIForUser('جاري التحميل', false);
-                            return;
-                        }
-                        
-                        // تحديث الاسم والدور في Firestore (مع الاحتفاظ بدور المدير إذا كان مسجلاً محلياً)
-                        await checkAndAddUser(userId, finalName, finalRole);
-                        
-                        // إعادة تشغيل logicApp للتأكد من تحديث الـ UID والمعلومات إذا لم يتم تشغيلها في الخطوة 1
-                        if (!document.getElementById('sections-container').hasChildNodes()) {
-                            initializeAppLogic(finalName);
-                        }
-
-                        if (isUserAdmin) {
-                            listenForPermissionRequests();
-                        }
-                        
-                        updateUserPresence();
-
-                    } else {
-                        userId = '';
-                        // محاولة تسجيل الدخول كمجهول لبدء الدورة
-                        try {
-                             await signInAnonymously(auth);
-                        } catch (e) {
-                            console.error("فشل تسجيل الدخول المجهول:", e);
-                            if (loginModal) loginModal.classList.remove('hidden');
-                        }
-                    }
-                });
-            } catch (error) {
-                console.error("خطأ كبير في تهيئة Firebase:", error);
-                showLoginError(`خطأ في الاتصال بقاعدة البيانات. (${error.message})`);
-                 if (loginModal) {
-                     loginModal.classList.remove('hidden');
-                 }
-            }
-        }
-
-        /**
-         * التحقق من وجود المستخدم وتحديث دوره (للمدير)
-         */
-        async function checkAndAddUser(authUid, name, role) {
-            if (!authUid || !name || !usersCollectionRef) return;
-            try {
-                const userDocRef = doc(db, usersPath, authUid);
-                const userDocSnap = await getDoc(userDocRef);
-                
-                const updateData = { name: name, role: role };
-
-                if (!userDocSnap.exists() || userDocSnap.data().role !== role || userDocSnap.data().name !== name) {
-                    await setDoc(userDocRef, updateData, { merge: true });
-                }
-            } catch (error) {
-                console.error("خطأ في التحقق أو إضافة المستخدم:", error);
-            }
-        }
-
 
         /**
          * بدء منطق التطبيق بعد تسجيل الدخول وتحديد الدور
@@ -571,6 +586,7 @@
         function initializeAppLogic(userName) {
              if (!userName) return;
 
+            // تم تحديث isUserAdmin بناءً على Firestore في listenToAuthChanges
             updateUIForUser(userName, isUserAdmin);
 
             // تهيئة جميع النوافذ المنبثقة (المنصة)
@@ -599,6 +615,7 @@
                  userNameDisplay.textContent = `مرحباً بك، ${name} (${isAdmin ? 'مدير' : 'مشاهد'})`;
              } 
 
+            // يجب استخدام adminControls و generalControls هنا بعد أن أصبحت متغيرة عالمية
             adminControls.forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) {
@@ -622,7 +639,7 @@
             
             // إدارة أزرار تسجيل الدخول/الخروج
             if (logoutBtn && loginAdminBtn) {
-                if (isAdmin) { 
+                if (userId) { // إذا كان هناك مستخدم مسجل الدخول (سواء مدير أو مشاهد)
                     logoutBtn.classList.remove('hidden');
                     loginAdminBtn.classList.add('hidden');
                 } else {
@@ -822,7 +839,7 @@
             editItemForm = document.getElementById('edit-item-form');
             editItemTitleInput = document.getElementById('edit-item-title');
             editItemLinkInput = document.getElementById('edit-item-link');
-            editItemIdInput = document.getElementById('edit-item-id');
+            editItemIdInput = document.getElementById('edit-item-id'); // المتغير الصحيح
             editItemSectionIdInput = document.getElementById('edit-item-section-id');
 
              if (!sectionsContainer) return;
@@ -844,7 +861,8 @@
 
                     if(editItemTitleInput) editItemTitleInput.value = title;
                     if(editItemLinkInput) editItemLinkInput.value = link;
-                    if(editItemIdInput) editItemIdInput.value = itemId;
+                    // تم تصحيح الخطأ المطبعي هنا: كان يستخدم 'editItemItemIdInput'
+                    if(editItemIdInput) editItemIdInput.value = itemId; 
                     if(editItemSectionIdInput) editItemSectionIdInput.value = sectionId;
 
                     editItemModal.classList.remove('hidden');
@@ -881,6 +899,7 @@
 
         function setupChatWindow() {
             const chatToggle = document.getElementById('chat-toggle');
+            // (تعديل) التأكد من أن جميع متغيرات الدردشة معرفة
             chatWindow = document.getElementById('chat-window');
             closeChatBtn1 = document.getElementById('close-chat'); // من قائمة الدردشة
             closeChatBtn2 = document.getElementById('close-chat-2'); // من نافذة الرسائل
@@ -1300,8 +1319,9 @@
                 const closeButton = document.getElementById('close-section-modal');
                 if (closeButton) closeButton.click();
             } catch (error) {
-                console.error("خطأ في إضافة القسم:", error);
-                showAlert("حدث خطأ أثناء إضافة القسم.");
+                // (جديد) طباعة الخطأ هنا لتحديد المشكلة بالضبط (غالباً ما تكون قواعد أمان)
+                console.error("خطأ في إضافة القسم (تأكد من قواعد الأمان):", error);
+                showAlert("❌ فشل إضافة القسم. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
 
@@ -1318,7 +1338,8 @@
 
             onSnapshot(sectionsQuery, (snapshot) => {
                 if (sectionsContainer) sectionsContainer.innerHTML = '';
-
+                
+                // (جديد) إظهار رسالة عدم وجود أقسام بدلاً من رسالة التحميل
                 if(snapshot.empty) {
                     if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-gray-500 text-center col-span-3">لا توجد أقسام حتى الآن. ${isUserAdmin ? 'قم بإضافة قسم جديد من الزر العلوي.' : 'يرجى الانتظار حتى يقوم المدير بإضافة محتوى.'}</p>`;
                 }
@@ -1331,8 +1352,9 @@
                 setupItemSorting();
 
             }, (error) => {
-                console.error("خطأ في جلب الأقسام:", error);
-                if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ في الاتصال بقاعدة البيانات. تأكد من إعداداتك.</p>`;
+                // (جديد) طباعة الخطأ هنا لتحديد المشكلة بالضبط (غالباً ما تكون قواعد أمان)
+                console.error("خطأ في جلب الأقسام (تأكد من قواعد الأمان):", error);
+                if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ في الاتصال بقاعدة البيانات. تأكد من أن قواعد أمان Firestore تسمح بقراءة مجموعة 'sections'.</p>`;
             });
         }
         
@@ -1433,8 +1455,8 @@
                 });
                 if(editSectionModal) editSectionModal.classList.add('hidden');
             } catch (error) {
-                console.error("خطأ في تعديل القسم:", error);
-                showAlert("حدث خطأ أثناء تعديل القسم.");
+                console.error("خطأ في تعديل القسم (تأكد من قواعد الأمان):", error);
+                showAlert("❌ فشل تعديل القسم. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
 
@@ -1496,8 +1518,8 @@
                 await loadEditorsForSection(sectionId); 
 
             } catch (error) {
-                console.error("خطأ في إزالة المحرر:", error);
-                showAlert("حدث خطأ أثناء إزالة المحرر.");
+                console.error("خطأ في إزالة المحرر (تأكد من قواعد الأمان):", error);
+                showAlert("❌ فشل إزالة المحرر. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
 
@@ -1539,7 +1561,7 @@
 
 
             try {
-                 if (!db || !sectionsPath) {
+                 if (!sectionsCollectionRef) {
                      showAlert("خطأ في الاتصال لإضافة العنصر.");
                       return;
                  }
@@ -1550,8 +1572,8 @@
                 const closeButton = document.getElementById('close-modal');
                 if (closeButton) closeButton.click();
             } catch (error) {
-                console.error("خطأ في إضافة العنصر:", error);
-                showAlert("حدث خطأ أثناء إضافة العنصر.");
+                console.error("خطأ في إضافة العنصر (تأكد من قواعد الأمان):", error);
+                showAlert("❌ فشل إضافة العنصر. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
 
@@ -1561,7 +1583,7 @@
         async function handleEditItemFormSubmit(e) {
             e.preventDefault();
             const sectionId = editItemSectionIdInput ? editItemSectionIdInput.value : '';
-            const itemId = editItemIdInput ? editItemItemIdInput.value : '';
+            const itemId = editItemIdInput ? editItemIdInput.value : '';
             const newTitle = editItemTitleInput ? editItemTitleInput.value.trim() : '';
             const newLink = editItemLinkInput ? editItemLinkInput.value.trim() : '';
 
@@ -1592,8 +1614,8 @@
                    if(closeButton) closeButton.click();
                 }
             } catch (error) {
-                console.error("خطأ في تعديل العنصر:", error);
-                showAlert("حدث خطأ أثناء تعديل العنصر.");
+                console.error("خطأ في تعديل العنصر (تأكد من قواعد الأمان):", error);
+                showAlert("❌ فشل تعديل العنصر. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
 
@@ -1625,8 +1647,8 @@
                     });
                 }
             } catch (error) {
-                console.error("خطأ في حذف العنصر:", error);
-                showAlert("حدث خطأ أثناء حذف العنصر.");
+                console.error("خطأ في حذف العنصر (تأكد من قواعد الأمان):", error);
+                showAlert("❌ فشل حذف العنصر. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
 
@@ -1646,8 +1668,8 @@
                 const sectionRef = doc(db, sectionsPath, sectionId);
                 await deleteDoc(sectionRef);
             } catch (error) {
-                console.error("خطأ في حذف القسم:", error);
-                showAlert("حدث خطأ أثناء حذف القسم.");
+                console.error("خطأ في حذف القسم (تأكد من قواعد الأمان):", error);
+                showAlert("❌ فشل حذف القسم. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
 
@@ -1748,7 +1770,9 @@
              if (!item || !item.id) return document.createElement('div');
 
             const itemDiv = document.createElement('div');
-            itemDiv.className = "group item-card bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative item-wrapper flex justify-between items-center";
+            // تم تعديل فئة itemDiv لحذف "justify-between" والسماح للعنوان بالنمو بشكل أفضل
+            // تم إضافة group لتفعيل group-hover
+            itemDiv.className = "group item-card bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative item-wrapper flex items-center";
             itemDiv.dataset.itemId = item.id;
 
             let href = item.url || '#';
@@ -1762,36 +1786,42 @@
                 ? `<svg class="w-6 h-6 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>`
                 : `<svg class="w-6 h-6 text-green-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625a3.375 3.375 0 00-3.375 3.375v11.25a3.375 3.375 0 003.375 3.375h12.75a3.375 3.375 0 003.375-3.375V12M10.5 1.5H18" /></svg>`;
                 
-            // (جديد) مقبض السحب والإفلات
+            // (جديد) مقبض السحب والإفلات - يظهر على الجوال والمدير
             const dragHandle = canEdit ? `
-                <div class="drag-handle text-teal-800 hover:bg-gray-100">
+                <div class="drag-handle text-teal-800 hover:bg-gray-100 ${canEdit ? 'flex' : 'hidden'} md:hidden md:group-hover:flex">
                     <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M12 17.25h8.25"/></svg>
                 </div>
             ` : '';
+            
+            // (تعديل) جعل الأزرار مرئية دائما على الجوال (بدون hover)
+            const controlButtons = canEdit ? `
+                 <div class="flex items-center gap-1 flex-shrink-0"> 
+                     <button class="item-edit-btn p-1 text-blue-500 hover:text-blue-700 transition-colors" title="تعديل العنصر">
+                         <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg>
+                     </button>
+                     <button class="item-delete-btn p-1 text-red-500 hover:text-red-700 transition-colors" title="حذف العنصر">
+                         <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
+                     </button>
+                 </div>
+             ` : '';
 
 
+            // (تعديل رئيسي) تم إعادة ترتيب العناصر لضمان ظهور العنوان أولاً مع منح مساحة مرنة له
             itemDiv.innerHTML = `
-                 <div class="flex items-center gap-3 flex-grow min-w-0"> 
+                ${dragHandle}
+                 <div class="flex items-center gap-3 flex-1 min-w-0"> 
                     ${itemTypeIcon}
-                    <a href="${href}" ${target} ${download} class="font-semibold text-gray-800 hover:text-teal-600 transition-colors flex-grow min-w-0">
+                    <a href="${href}" ${target} ${download} class="font-semibold text-gray-800 hover:text-teal-600 transition-colors flex-grow min-w-0 overflow-hidden">
                         <span class="block truncate">${formattedTitle || 'عنصر بدون عنوان'}</span>
                     </a>
                  </div>
 
-                 <div class="flex items-center gap-1 flex-shrink-0 ml-2"> 
-                     ${dragHandle}
+                 <div class="flex items-center gap-1 flex-shrink-0 mr-2"> 
+                     
                      <button class="item-share-btn p-1 text-green-500 hover:text-green-600 transition-colors" title="مشاركة عبر واتساب">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
                      </button>
-
-                    ${canEdit ? ` 
-                         <button class="item-edit-btn p-1 text-blue-500 hover:text-blue-700 transition-colors" title="تعديل العنصر">
-                             <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg>
-                         </button>
-                         <button class="item-delete-btn p-1 text-red-500 hover:text-red-700 transition-colors" title="حذف العنصر">
-                             <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
-                         </button>
-                     ` : ''}
+                    ${controlButtons}
                  </div>
             `;
             return itemDiv;
@@ -1815,10 +1845,8 @@
             if (logoutBtn) {
                 logoutBtn.addEventListener('click', async () => {
                     if (confirm("هل أنت متأكد أنك تريد تسجيل الخروج؟")) {
-                        localStorage.removeItem('rashedonUserName');
-                        localStorage.removeItem(ADMIN_SIGNATURE); // حذف توقيع المدير
-                        await signOut(auth); // الخروج من جلسة Firebase المجهولة
-                        window.location.reload(); // إعادة تحميل لإعادة تعيين الحالة
+                        await signOut(auth); // الخروج من جلسة Firebase المصادق عليها
+                        // onAuthStateChanged سيتولى إظهار شاشة الدخول
                     }
                 });
             }
@@ -2060,7 +2088,7 @@
         /**
          * دالة مساعدة لإنشاء صفحة PDF واحدة من كود HTML
          */
-        async function createPdfPageFromHTML(doc, sectionTitle, itemChunk) {
+        async function createPdfPageFromHTML(doc, sectionTitle, itemChunk, isFirstPage) {
             const printContainer = document.createElement('div');
             printContainer.className = 'print-container';
 
@@ -2093,6 +2121,9 @@
             const listDiv = document.createElement('div');
             listDiv.className = 'print-item-list';
 
+             // (جديد) قائمة لحفظ بيانات الـ QR Code لربطها بالـ PDF
+             const qrDataForPdf = [];
+             
              if (Array.isArray(itemChunk) && itemChunk.length > 0) {
                  for (const item of itemChunk) {
                       if (typeof item !== 'object' || item === null) continue;
@@ -2106,11 +2137,16 @@
 
                       const qrDiv = document.createElement('div');
                       qrDiv.className = 'print-item-qr';
-                      qrDiv.dataset.url = (item.type === 'link' && item.url) ? item.url : '';
+                      const url = (item.type === 'link' && item.url) ? item.url : '';
+                      qrDiv.dataset.url = url;
 
                       itemDiv.appendChild(textDiv);
                       itemDiv.appendChild(qrDiv);
                       listDiv.appendChild(itemDiv);
+                      
+                      if (url) {
+                         qrDataForPdf.push({ div: qrDiv, url: url, text: item.title });
+                      }
                  }
              } else {
                  listDiv.innerHTML = '<p style="padding: 10px; text-align: center;">لا توجد عناصر في هذا القسم.</p>';
@@ -2129,20 +2165,17 @@
 
             document.body.appendChild(printContainer);
 
-            const qrPlaceholders = printContainer.querySelectorAll('.print-item-qr');
-            qrPlaceholders.forEach(qrDiv => {
-                const url = qrDiv.dataset.url;
-                if (url) {
-                   try { 
-                         new QRCode(qrDiv, {
-                             text: url,
-                             width: 80,
-                             height: 80,
-                             correctLevel: QRCode.CorrectLevel.L
-                         });
-                    } catch(qrError) {
-                        qrDiv.textContent = "[خطأ QR]"; 
-                    }
+            // إنشاء صور QR مؤقتاً في HTML
+            qrDataForPdf.forEach(qr => {
+                try { 
+                    new QRCode(qr.div, {
+                        text: qr.url,
+                        width: 80,
+                        height: 80,
+                        correctLevel: QRCode.CorrectLevel.L
+                    });
+                } catch(qrError) {
+                    qr.div.textContent = "[خطأ QR]"; 
                 }
             });
 
@@ -2164,9 +2197,31 @@
             const imgData = canvas.toDataURL('image/png');
             const pdfWidth = doc.internal.pageSize.getWidth();
             const pdfHeight = doc.internal.pageSize.getHeight();
+            
+            // إضافة صفحة جديدة إذا لم تكن الصفحة الأولى
+            if (!isFirstPage) doc.addPage();
 
+
+            // الحصول على أبعاد العناصر في الصفحة المطبوعة
+            const elementsBounds = [];
+            qrDataForPdf.forEach(qr => {
+                 const rect = qr.div.getBoundingClientRect();
+                 elementsBounds.push({
+                     url: qr.url,
+                     // تحويل البكسلات إلى ملم
+                     x: rect.right / (canvas.width / pdfWidth) - (rect.width / (canvas.width / pdfWidth)), // تم تعديل حساب x للرسم من اليمين
+                     y: rect.top / (canvas.height / pdfHeight),
+                     width: rect.width / (canvas.width / pdfWidth),
+                     height: rect.height / (canvas.height / pdfHeight)
+                 });
+            });
 
             doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+            // (جديد) إضافة رابط قابل للنقر فوق كل QR Code
+            elementsBounds.forEach(bound => {
+                doc.link(bound.x, bound.y, bound.width, bound.height, { url: bound.url });
+            });
 
             document.body.removeChild(printContainer);
         }
@@ -2210,13 +2265,11 @@
                       const itemChunks = chunkArray(items, 5); 
 
                       if (itemChunks.length === 0) {
-                           if (!isFirstPage) doc.addPage();
-                           await createPdfPageFromHTML(doc, sectionTitle, []);
+                           await createPdfPageFromHTML(doc, sectionTitle, [], isFirstPage);
                            isFirstPage = false;
                       } else {
                            for (const chunk of itemChunks) {
-                                if (!isFirstPage) doc.addPage();
-                                await createPdfPageFromHTML(doc, sectionTitle, chunk);
+                                await createPdfPageFromHTML(doc, sectionTitle, chunk, isFirstPage);
                                 isFirstPage = false;
                            }
                       }
@@ -2229,6 +2282,7 @@
                  }
 
             } catch (error) {
+                console.error("خطأ في إنشاء ملف PDF:", error);
                 showAlert("حدث خطأ أثناء إنشاء ملف PDF.");
             } finally {
                 if (pdfSpinnerModal) pdfSpinnerModal.classList.add('hidden');
@@ -2262,6 +2316,7 @@
          * (جديد) بدء تشغيل منطق الدردشة
          */
         function initializeChatApp() {
+            // (تعديل) التأكد من أن جميع عناصر الدردشة تم جلبها بشكل صحيح
             chatUsernameDisplay = document.getElementById('chat-username-display');
             chatUsersListDiv = document.getElementById('chat-users-list');
             chatMessagesDiv = document.getElementById('chat-messages');
@@ -2276,7 +2331,7 @@
             
             chatUsernameDisplay.textContent = currentUserName;
 
-            initChatAudio();
+            initChatAudio(); 
             document.body.addEventListener('click', initChatAudio, { once: true });
             document.body.addEventListener('keydown', initChatAudio, { once: true });
 
@@ -2295,14 +2350,11 @@
         async function updateUserPresence() {
             if (!userId || !currentUserName) return;
             try {
-                // التأكد من استخدام finalRole و finalName المحدثين
-                const finalRole = localStorage.getItem(ADMIN_SIGNATURE) === 'true' ? ADMIN_ROLE : 'viewer';
-                const finalName = localStorage.getItem('rashedonUserName') || 'مشاهد';
-                
                 await setDoc(chatPaths.userDoc(userId), { 
-                    name: finalName, 
-                    role: finalRole,
-                    lastSeen: serverTimestamp() 
+                    name: currentUserName, 
+                    role: currentUserRole,
+                    lastSeen: serverTimestamp(),
+                    email: currentUserEmail
                 }, { merge: true });
             } catch (e) {
                 console.error("فشل في تحديث حالة التواجد:", e);
@@ -2779,52 +2831,58 @@
         </header>
 
         <nav class="bg-white shadow-md p-3 sticky top-0 z-40">
+            <!-- تم تعديل حاوية الأزرار الرئيسية لتقليل حجم الخط والمسافة على الجوال -->
+            <!-- تم إضافة flex-shrink-0 للأزرار لضمان عدم انكماشها على الجوال -->
             <div class="container mx-auto flex justify-center items-center gap-2 md:gap-4 flex-wrap">
-                <div class="relative hidden"> 
-                    <button id="admin-manage-btn" class="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">
-                        <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM12 15a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
+                <!-- أزرار المدير (تظهر للمدير فقط) -->
+                <div class="relative hidden flex-shrink-0"> 
+                    <button id="admin-manage-btn" class="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-blue-700 transition duration-300">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM12 15a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
                         إدارة 
                     </button>
                 </div>
-                <div class="relative hidden"> 
-                    <button id="admin-perms-btn" class="flex items-center gap-2 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-yellow-600 transition duration-300">
-                        <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <div class="relative hidden flex-shrink-0"> 
+                    <button id="admin-perms-btn" class="flex items-center gap-1 bg-yellow-500 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-yellow-600 transition duration-300">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         الطلبات
                     </button>
                     <span id="admin-perms-badge" class="notification-badge hidden">0</span>
                 </div>
-                <div class="relative hidden"> 
-                    <button id="add-section-btn" class="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-green-600 transition duration-300">
-                        <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <div class="relative hidden flex-shrink-0"> 
+                    <button id="add-section-btn" class="flex items-center gap-1 bg-green-500 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-green-600 transition duration-300">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         إضافة 
                     </button>
                 </div>
                 
-                <button id="delete-all-chat-btn" class="hidden flex items-center gap-2 bg-red-700 text-white px-4 py-2 rounded-lg shadow-md hover:bg-red-800 transition duration-300">
-                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
-                    حذف جميع الدردشات
+                <!-- زر حذف الدردشات (للمدير فقط) -->
+                <button id="delete-all-chat-btn" class="hidden flex items-center gap-1 bg-red-700 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-red-800 transition duration-300 flex-shrink-0">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg>
+                    حذف الدردشات
                 </button>
 
-                <button id="print-sections-btn" class="hidden flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-gray-700 transition duration-300">
-                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <!-- الأزرار العامة -->
+                <button id="print-sections-btn" class="hidden flex items-center gap-1 bg-gray-600 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-gray-700 transition duration-300 flex-shrink-0">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                        <path fill-rule="evenodd" d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0113.25 8H6.75A1.75 1.75 0 015 6.25v-3.5zm.75 0v3.5c0 .138.112.25.25.25h6.5a.25.25 0 00.25-.25v-3.5a.25.25 0 00-.25-.25h-6.5a.25.25 0 00-.25.25zM6 10.75A.75.75 0 016.75 10h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 016 10.75zM6 13.75A.75.75 0 016.75 13h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 016 13.75zM3.25 9A1.75 1.75 0 001.5 10.75v3.5c0 .966.784 1.75 1.75 1.75h1.25a.75.75 0 010 1.5H3.25A3.25 3.25 0 010 14.25v-3.5A3.25 3.25 0 013.25 7.5h13.5A3.25 3.25 0 0120 10.75v3.5A3.25 3.25 0 0116.75 17.5h-1.25a.75.75 0 010-1.5h1.25A1.75 1.75 0 0018.5 14.25v-3.5A1.75 1.75 0 0016.75 9H3.25z" clip-rule="evenodd" />
                     </svg>
-                    طباعة الكل(PDF)
+                    طباعة الكل
                 </button>
-                <button id="logout-btn" class="hidden flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-red-600 transition duration-300">
-                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>
+                <button id="logout-btn" class="hidden flex items-center gap-1 bg-red-500 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-red-600 transition duration-300 flex-shrink-0">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>
                     خروج
                 </button>
-                <button id="login-admin-btn" class="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-teal-700 transition duration-300">
-                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>
-                    تسجيل دخول المدير
+                <button id="login-admin-btn" class="flex items-center gap-1 bg-teal-600 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-teal-700 transition duration-300 flex-shrink-0">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>
+                    تسجيل الدخول
                 </button>
             </div>
         </nav>
 
         <main class="flex-grow p-4 md:p-8">
             <div id="sections-container" class="container mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <p class="text-gray-500 text-center col-span-3 text-xl p-10">
+                <!-- تم إزالة رسالة التحميل الثابتة -->
+                <p id="initial-loading-message" class="text-gray-500 text-center col-span-3 text-xl p-10">
                     جاري الاتصال بقاعدة البيانات...
                 </p>
             </div>
@@ -2845,21 +2903,30 @@
             <svg class="w-20 h-20 text-teal-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
             </svg>
-            <h2 class="text-3xl font-bold text-gray-800 mb-2">أهلاً بك في منصة الراشدون</h2>
-            <p class="text-gray-600 mb-6">الرجاء إدخال اسمك (وكلمة المرور إذا كنت المدير).</p>
+            <h2 class="text-3xl font-bold text-gray-800 mb-2">تسجيل الدخول / إنشاء حساب</h2>
+            <p class="text-gray-600 mb-6">الرجاء إدخال بياناتك للدخول إلى المنصة.</p>
             <form id="login-form">
                 <div class="mb-4 text-right">
-                    <label for="user-name-input" class="block text-sm font-medium text-gray-700 mb-1">الاسم الكامل</label>
-                    <input type="text" id="user-name-input" required class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-lg" placeholder="مثال: علي عسيري أو اسم الطالب">
+                    <label for="user-name-input" class="block text-sm font-medium text-gray-700 mb-1">الاسم الكامل (للتسجيل)</label>
+                    <input type="text" id="user-name-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-lg" placeholder="الاسم الكامل">
+                </div>
+                <div class="mb-4 text-right">
+                    <label for="user-email-input" class="block text-sm font-medium text-gray-700 mb-1">البريد الإلكتروني</label>
+                    <input type="email" id="user-email-input" required class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-lg" placeholder="example@domain.com">
                 </div>
                  <div class="mb-4 text-right">
-                    <label for="user-password-input" class="block text-sm font-medium text-gray-700 mb-1">كلمة المرور (خاصة بالمدير)</label>
-                    <input type="password" id="user-password-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-lg" placeholder="اتركها فارغة للمشاهدة">
+                    <label for="user-password-input" class="block text-sm font-medium text-gray-700 mb-1">كلمة المرور (6 أحرف على الأقل)</label>
+                    <input type="password" id="user-password-input" required class="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500 text-lg" placeholder="كلمة المرور">
                 </div>
                 <p id="login-error" class="hidden text-red-500 text-sm mb-4"></p>
-                <button type="submit" class="w-full bg-teal-600 text-white py-3 px-5 rounded-lg hover:bg-teal-700 transition-colors font-bold text-lg">
-                    دخــــول
-                </button>
+                <div class="flex flex-col gap-3">
+                    <button type="submit" class="w-full bg-teal-600 text-white py-3 px-5 rounded-lg hover:bg-teal-700 transition-colors font-bold text-lg">
+                        تسجيل الدخول
+                    </button>
+                    <button type="button" id="register-new-user-btn" class="w-full bg-gray-500 text-white py-3 px-5 rounded-lg hover:bg-gray-600 transition-colors font-bold text-lg">
+                        إنشاء حساب جديد
+                    </button>
+                </div>
             </form>
         </div>
     </div>
