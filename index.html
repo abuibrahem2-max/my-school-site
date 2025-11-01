@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght+400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -338,12 +338,14 @@
         let pdfSpinnerModal;
         let adminManageModal, adminUsersList;
         let adminPermsModal, adminPermsList;
-        let currentEditorsList, currentEditorsContainer; 
+        let currentEditorsList, currentEditorsContainer;
         
         // (جديد) أزرار تسجيل الدخول/الخروج
         let logoutBtn, loginAdminBtn; // تم الإبقاء على اسم الزر ولكن وظيفته تغيرت لفتح المودال فقط
         let chatTotalBadge; // شارة الدردشة العائمة
         let deleteAllChatBtn; // زر حذف جميع الدردشات
+        // (جديد) نافذة اختيار أقسام الطباعة
+        let printSelectionModal; 
         
 
         /**
@@ -363,8 +365,15 @@
             // (جديد) عناصر أزرار تسجيل الدخول/الخروج
             logoutBtn = document.getElementById('logout-btn');
             loginAdminBtn = document.getElementById('login-admin-btn');
-            chatTotalBadge = document.getElementById('chat-toggle').querySelector('#chat-total-badge'); // شارة الدردشة الكلية
+            
+            // (تعديل هنا) جلب شارة الدردشة مباشرة بالـ ID
+            chatTotalBadge = document.getElementById('chat-total-badge'); // شارة الدردشة الكلية
+            
             deleteAllChatBtn = document.getElementById('delete-all-chat-btn'); // زر حذف جميع الدردشات
+            
+            // (جديد) تهيئة نافذة اختيار أقسام الطباعة
+            printSelectionModal = document.getElementById('print-selection-modal');
+
 
             // تهيئة نافذة تسجيل الدخول (المنصة)
             loginModal = document.getElementById('login-modal');
@@ -407,7 +416,7 @@
                 popups.forEach(popup => {
                     const itemCard = popup.closest('.item-card');
                     const itemActionBtn = itemCard ? itemCard.querySelector('.item-action-btn') : null;
-                    if (!itemActionBtn.contains(e.target) && !popup.contains(e.target)) {
+                    if (itemActionBtn && !itemActionBtn.contains(e.target) && !popup.contains(e.target)) {
                         popup.classList.add('hidden');
                     }
                 });
@@ -618,6 +627,7 @@
             setupAlertModal();
             setupAdminManageModal();
             setupAdminPermsModal();
+            setupPrintSelectionModal(); // (جديد) تهيئة نافذة اختيار الطباعة
             
             // تهيئة نافذة الدردشة المدمجة
             setupChatWindow(); 
@@ -897,7 +907,7 @@
 
             const close = () => editItemModal.classList.add('hidden');
             if (closeBtn) closeBtn.addEventListener('click', close);
-            if(cancelBtn) cancelBtn.addEventListener('click', close);
+            if(cancelBtn) cancelModalBtn.addEventListener('click', close);
             editItemModal.addEventListener('click', (e) => (e.target === editItemModal) && close());
 
 
@@ -914,6 +924,38 @@
                 // إخفاء جميع النوافذ المنبثقة الأخرى قبل إظهار هذه
                 document.querySelectorAll('.item-action-popup:not(.hidden)').forEach(p => p.classList.add('hidden'));
                 popup.classList.toggle('hidden');
+            }
+        }
+        
+        /**
+         * (جديد) تهيئة نافذة اختيار الطباعة
+         */
+        function setupPrintSelectionModal() {
+            if (!printSelectionModal) return;
+
+            const closeBtn = document.getElementById('close-print-selection-modal');
+            const printBtn = document.getElementById('confirm-print-sections');
+            const form = document.getElementById('print-selection-form');
+
+            const close = () => printSelectionModal.classList.add('hidden');
+            if (closeBtn) closeBtn.addEventListener('click', close);
+
+            // ربط نموذج الطباعة
+            if (form) {
+                form.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    
+                    const checkboxes = form.querySelectorAll('input[name="section-to-print"]:checked');
+                    const selectedSectionIds = Array.from(checkboxes).map(cb => cb.value);
+
+                    if (selectedSectionIds.length > 0) {
+                        // (تعديل) إعادة توجيه الطلب إلى دالة طباعة الأقسام الرئيسية
+                        generatePdfForSections(null, selectedSectionIds);
+                    } else {
+                        showAlert('الرجاء اختيار قسم واحد على الأقل للطباعة.');
+                    }
+                    close();
+                });
             }
         }
 
@@ -1372,28 +1414,83 @@
                  if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ فادح: لم يتم تهيئة اتصال الأقسام.</p>`;
                  return;
              }
-            // (تعديل) إضافة orderBy إذا كان الترتيب مطلوباً على مستوى الأقسام نفسها
-            const sectionsQuery = query(sectionsCollectionRef);
+            // (تعديل) إزالة orderBy مؤقتاً لحل مشكلة قواعد الأمان
+            const sectionsQuery = query(sectionsCollectionRef); 
 
             onSnapshot(sectionsQuery, (snapshot) => {
+                // (جديد) تصفية الأقسام وفرزها محلياً لضمان ترتيب السحب والإفلات
+                let allSections = [];
+                snapshot.docs.forEach(doc => {
+                    allSections.push({ id: doc.id, data: doc.data(), order: doc.data().order || 0 });
+                });
+                
+                // الفرز بناءً على حقل 'order'
+                allSections.sort((a, b) => (a.order || 0) - (b.order || 0));
+
+
                 if (sectionsContainer) sectionsContainer.innerHTML = '';
                 
                 // (جديد) إظهار رسالة عدم وجود أقسام بدلاً من رسالة التحميل
-                if(snapshot.empty) {
+                if(allSections.length === 0) {
                     if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-gray-500 text-center col-span-3">لا توجد أقسام حتى الآن. ${isUserAdmin ? 'قم بإضافة قسم جديد من الزر العلوي.' : 'يرجى الانتظار حتى يقوم المدير بإضافة محتوى.'}</p>`;
                 }
 
-                snapshot.docs.forEach((doc) => {
-                    renderSection(doc);
+                allSections.forEach((sectionData) => {
+                    renderSection({ id: sectionData.id, data: () => sectionData.data });
                 });
                 
-                // (جديد) تفعيل خاصية السحب والإفلات بعد رسم جميع الأقسام
+                // (جديد) تفعيل خاصية السحب والإفلات على مستوى الأقسام والعناصر
+                setupSectionSorting(snapshot.docs);
                 setupItemSorting();
 
             }, (error) => {
                 // (جديد) طباعة الخطأ هنا لتحديد المشكلة بالضبط (غالباً ما تكون قواعد أمان)
                 console.error("خطأ في جلب الأقسام (تأكد من قواعد الأمان):", error);
                 if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ في الاتصال بقاعدة البيانات. تأكد من أن قواعد أمان Firestore تسمح بقراءة مجموعة 'sections'.</p>`;
+            });
+        }
+        
+        /**
+         * (جديد) إعداد خاصية السحب والإفلات لترتيب الأقسام أفقياً
+         */
+        function setupSectionSorting(sections) {
+            if (!sectionsContainer || !isUserAdmin) return; // فقط للمدير
+
+            Sortable.create(sectionsContainer, {
+                animation: 150,
+                filter: '.add-item-btn', // لا تسمح بسحب زر الإضافة
+                onEnd: async function (evt) {
+                    const oldIndex = evt.oldIndex;
+                    const newIndex = evt.newIndex;
+                    
+                    if (oldIndex === newIndex) return;
+
+                    const batch = writeBatch(db);
+                    
+                    // تحويل السنابشوت إلى مصفوفة قابلة للتعديل
+                    let sectionsArray = sections.map(doc => ({ id: doc.id, order: doc.data().order || Date.now(), data: doc.data() }));
+
+                    // إعادة ترتيب المصفوفة محليًا
+                    const [movedSection] = sectionsArray.splice(oldIndex, 1);
+                    sectionsArray.splice(newIndex, 0, movedSection);
+
+                    // تحديث حقول الترتيب (Order)
+                    sectionsArray.forEach((section, index) => {
+                        const newOrderValue = index * 10; // استخدام مضاعفات 10 لتسهيل الإدخالات اليدوية
+                        if (section.data.order !== newOrderValue) {
+                            const sectionRef = doc(db, sectionsPath, section.id);
+                            batch.update(sectionRef, { order: newOrderValue });
+                        }
+                    });
+
+                    try {
+                        await batch.commit();
+                        console.log("تم تحديث ترتيب الأقسام بنجاح.");
+                    } catch (error) {
+                        console.error("خطأ في حفظ ترتيب الأقسام:", error);
+                        showAlert("❌ فشل تحديث ترتيب الأقسام. (يرجى التحقق من قواعد أمان Firestore).");
+                    }
+                }
             });
         }
         
@@ -1927,7 +2024,8 @@
             const printSectionsBtn = document.getElementById('print-sections-btn');
             if (printSectionsBtn) {
                 printSectionsBtn.addEventListener('click', async () => {
-                    await generatePdfForSections(null);
+                    // (تعديل) فتح نافذة اختيار الأقسام للطباعة بدلاً من الطباعة المباشرة
+                    await loadSectionsForPrintSelection();
                 });
             }
             
@@ -1995,7 +2093,8 @@
                      if (printSectionBtn) {
                          const sectionEl = printSectionBtn.closest('.column-wrapper');
                          if (sectionEl) {
-                            await generatePdfForSections(sectionEl);
+                            // (تعديل) إرسال عنصر القسم للطباعة الموجهة
+                            await showItemSelectionForPrint(sectionEl.dataset.sectionId);
                          }
                          return;
                      }
@@ -2030,305 +2129,122 @@
         }
         
         /**
-         * (جديد ومُعدَّل) دالة حذف جميع الدردشات (للمدير)
+         * (جديد) تحميل الأقسام في نافذة اختيار الطباعة
          */
-        window.deleteAllChats = async function() {
-            if (!isUserAdmin) {
-                showAlert("ليس لديك صلاحية المدير لتنفيذ هذا الإجراء.", 'error');
-                return;
-            }
-
-            if (!confirm("⚠️ تحذير نهائي! هل أنت متأكد من حذف جميع الرسائل (الجماعية والخاصة) نهائياً؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
-
-            try {
-                const batch = writeBatch(db);
-                
-                // 1. حذف جميع رسائل الدردشة الجماعية (Collection: chat_group)
-                const groupSnapshot = await getDocs(chatPaths.groupChatCollection());
-                groupSnapshot.docs.forEach((doc) => {
-                    batch.delete(doc.ref);
-                });
-
-                // 2. تصفح جميع الوثائق في المجموعة الأصلية للمحادثات الخاصة (Collection: chat_private)
-                // وحذف الرسائل الموجودة داخل المجموعات الفرعية لكل وثيقة
-                const privateChatsBaseRef = collection(db, 'chat_private');
-                const privateChatsSnapshot = await getDocs(privateChatsBaseRef);
-                
-                for (const docSnap of privateChatsSnapshot.docs) {
-                    const messagesCollectionRef = collection(db, `chat_private/${docSnap.id}/messages`);
-                    const messagesSnapshot = await getDocs(messagesCollectionRef);
-                    
-                    // حذف كل رسالة داخل هذه المحادثة الخاصة
-                    messagesSnapshot.docs.forEach((msgDoc) => {
-                        batch.delete(msgDoc.ref);
-                    });
-                }
-                
-                // 3. مسح جميع حالات العدادات غير المقروءة (Collection: chat_state)
-                const chatStateBaseRef = collection(db, 'chat_state');
-                const chatStateSnapshot = await getDocs(chatStateBaseRef);
-                
-                for (const userStateDoc of chatStateSnapshot.docs) {
-                     const stateSubCollection = collection(db, `chat_state/${userStateDoc.id}/state`);
-                     const stateSnapshot = await getDocs(stateSubCollection);
-                     
-                     // حذف كل وثيقة حالة دردشة (التي تحتوي على العدادات)
-                     stateSnapshot.docs.forEach((stateDoc) => {
-                         batch.delete(stateDoc.ref);
-                     });
-                }
-
-
-                await batch.commit();
-                showAlert("✅ تم حذف جميع سجلات الدردشة بنجاح!", 'success');
-                
-                // إغلاق نافذة الدردشة وتحديث قائمة الرسائل
-                if (chatWindow && !chatWindow.classList.contains('hidden')) {
-                     document.getElementById('close-chat').click();
-                }
-            } catch (error) {
-                console.error("خطأ في حذف جميع الدردشات:", error);
-                showAlert("❌ حدث خطأ كبير أثناء حذف الدردشات. (تأكد من قواعد أمان Firestore)", 'error');
-            }
-        }
-
-
-        /**
-         * إظهار نافذة التنبيه
-         */
-        function showAlert(message, type = 'info') {
-            const alertModalMessage = document.getElementById('alert-modal-message');
-            const modalContent = document.getElementById('alert-modal-content');
-
-            if (alertModalMessage && alertModal && modalContent) {
-                alertModalMessage.textContent = message;
-                alertModal.classList.remove('hidden');
-                setTimeout(() => {
-                    modalContent.classList.remove('scale-95', 'opacity-0');
-                    modalContent.classList.add('scale-100', 'opacity-100');
-                }, 10);
-            }
-        }
-
-        /**
-         * مشاركة عنصر عبر واتساب
-         */
-        function shareItemViaWhatsApp(title, url) {
-            if (!title || !url) {
-                showAlert("لا يمكن مشاركة هذا العنصر لأنه لا يحتوي على عنوان أو رابط.");
-                return;
-            }
-            const message = encodeURIComponent(`${title}\n${url}`);
-            const whatsappUrl = `https://wa.me/?text=${message}`;
-            window.open(whatsappUrl, '_blank');
-        }
-
-        /**
-         * مشاركة قسم كامل عبر واتساب
-         */
-        async function shareSectionViaWhatsApp(sectionId) {
-             if (!sectionId) return;
-             const sectionData = await getSectionDataById(sectionId);
-             if (!sectionData) {
-                 showAlert("لم يتم العثور على بيانات القسم للمشاركة.");
-                 return;
-             }
-
-             let message = `*${sectionData.title || 'قسم بدون عنوان'}*\n\n`; 
-             const items = sectionData.items || [];
-             if (items.length > 0) {
-                 items.forEach(item => {
-                      if (item.title && item.url && item.type === 'link') {
-                          message += `${item.title}\n${item.url}\n\n`;
-                      }
-                 });
-             } else {
-                 message += "_لا توجد عناصر في هذا القسم._"; 
-             }
-
-             const encodedMessage = encodeURIComponent(message.trim());
-             const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
-             window.open(whatsappUrl, '_blank');
-        }
-
-
-        /**
-         * =============================================
-         * منطق إنشاء PDF مع QR Code
-         * =============================================
-         */
-         
-         /**
-          * دالة مساعدة لتقسيم مصفوفة إلى أجزاء
-          */
-        function chunkArray(array, size) {
-           if (!Array.isArray(array)) {
-               return [];
-           }
-           const chunks = [];
-           for (let i = 0; i < array.length; i += size) {
-               chunks.push(array.slice(i, i + size));
-           }
-           return chunks;
-        }
-
-
-        /**
-         * دالة مساعدة لإنشاء صفحة PDF واحدة من كود HTML
-         */
-        async function createPdfPageFromHTML(doc, sectionTitle, itemChunk, isFirstPage) {
-            const printContainer = document.createElement('div');
-            printContainer.className = 'print-container';
-
-            const superHeader = document.createElement('div');
-            superHeader.className = 'print-super-header';
-            superHeader.innerHTML = `
-                <div>المملكة العربية السعودية</div>
-                <div>وزارة التعليم</div>
-                <div>الإدارة العامة للتعليم بمنطقة عسير</div>
-                <div>ابتدائية ومتوسطة الراشدون بالمربع</div>
-            `;
-            printContainer.appendChild(superHeader);
-
-            const header = document.createElement('div');
-            header.className = 'print-header';
-            header.innerHTML = '<h1>تقرير منصة الراشدون</h1>';
-            printContainer.appendChild(header);
-
-            const contentWrapper = document.createElement('div');
-            contentWrapper.className = 'print-content-wrapper';
-
-            const sectionDiv = document.createElement('div');
-            sectionDiv.className = 'print-section';
-
-            const titleDiv = document.createElement('div');
-            titleDiv.className = 'print-section-title';
-            titleDiv.textContent = sectionTitle || 'قسم بدون عنوان';
-            sectionDiv.appendChild(titleDiv);
-
-            const listDiv = document.createElement('div');
-            listDiv.className = 'print-item-list';
-
-             // (جديد) قائمة لحفظ بيانات الـ QR Code لربطها بالـ PDF
-             const qrDataForPdf = [];
-             
-             if (Array.isArray(itemChunk) && itemChunk.length > 0) {
-                 for (const item of itemChunk) {
-                      if (typeof item !== 'object' || item === null) continue;
-
-                      const itemDiv = document.createElement('div');
-                      itemDiv.className = 'print-item';
-
-                      const textDiv = document.createElement('div');
-                      textDiv.className = 'print-item-text';
-                      textDiv.innerHTML = `<div class="print-item-title">${item.title || 'عنصر بدون عنوان'}</div>`; 
-
-                      const qrDiv = document.createElement('div');
-                      qrDiv.className = 'print-item-qr';
-                      const url = (item.type === 'link' && item.url) ? item.url : '';
-                      qrDiv.dataset.url = url;
-
-                      itemDiv.appendChild(textDiv);
-                      itemDiv.appendChild(qrDiv);
-                      listDiv.appendChild(itemDiv);
-                      
-                      if (url) {
-                         qrDataForPdf.push({ div: qrDiv, url: url, text: item.title });
-                      }
-                 }
-             } else {
-                 listDiv.innerHTML = '<p style="padding: 10px; text-align: center;">لا توجد عناصر في هذا القسم.</p>';
-             }
-            sectionDiv.appendChild(listDiv);
-            contentWrapper.appendChild(sectionDiv);
-            printContainer.appendChild(contentWrapper);
-
-            const footer = document.createElement('div');
-            footer.className = 'print-footer';
-            footer.innerHTML = `
-                <span>إعداد المعلم: علي إبراهيم عسيري</span>
-                <span>مدير المدرسة: أحمد سالم الشهري</span>
-            `;
-            printContainer.appendChild(footer);
-
-            document.body.appendChild(printContainer);
-
-            // إنشاء صور QR مؤقتاً في HTML
-            qrDataForPdf.forEach(qr => {
-                try { 
-                    new QRCode(qr.div, {
-                        text: qr.url,
-                        width: 80,
-                        height: 80,
-                        correctLevel: QRCode.CorrectLevel.L
-                    });
-                } catch(qrError) {
-                    qr.div.textContent = "[خطأ QR]"; 
-                }
-            });
-
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            let canvas;
-            try {
-                canvas = await html2canvas(printContainer, {
-                    scale: 2,
-                    useCORS: true,
-                    width: printContainer.offsetWidth,
-                    height: printContainer.offsetHeight
-                });
-            } catch (canvasError) {
-                 document.body.removeChild(printContainer); 
-                 throw canvasError; 
-            }
-
-            const imgData = canvas.toDataURL('image/png');
-            const pdfWidth = doc.internal.pageSize.getWidth();
-            const pdfHeight = doc.internal.pageSize.getHeight();
+        async function loadSectionsForPrintSelection() {
+            if (!printSelectionModal) return;
             
-            // إضافة صفحة جديدة إذا لم تكن الصفحة الأولى
-            if (!isFirstPage) doc.addPage();
+            const listContainer = document.getElementById('print-selection-list');
+            if (!listContainer) return;
+            
+            listContainer.innerHTML = '<p class="text-center text-gray-500">جاري تحميل الأقسام...</p>';
 
+            try {
+                const querySnapshot = await getDocs(query(sectionsCollectionRef, orderBy("order", "asc")));
+                listContainer.innerHTML = '';
+                
+                if (querySnapshot.empty) {
+                    listContainer.innerHTML = '<p class="text-center text-gray-500">لا توجد أقسام متاحة للطباعة.</p>';
+                    return;
+                }
 
-            // الحصول على أبعاد العناصر في الصفحة المطبوعة
-            const elementsBounds = [];
-            qrDataForPdf.forEach(qr => {
-                 const rect = qr.div.getBoundingClientRect();
-                 const pageRect = printContainer.getBoundingClientRect(); // للحصول على إحداثيات الصفحة
+                querySnapshot.docs.forEach(docSnap => {
+                    const section = docSnap.data();
+                    const sectionId = docSnap.id;
+                    
+                    // إظهار الأقسام المرئية للجميع أو الأقسام للمدير
+                    const isVisible = section.isVisible !== false || isUserAdmin;
+                    if (!isVisible) return;
 
-                 // حساب عامل التحويل من بكسل على الشاشة إلى ملم على PDF
-                 const scaleFactorX = pdfWidth / pageRect.width;
-                 const scaleFactorY = pdfHeight / pageRect.height;
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center space-x-3 p-3 border-b hover:bg-gray-50';
+                    div.innerHTML = `
+                        <input id="print-cb-${sectionId}" name="section-to-print" type="checkbox" value="${sectionId}" class="h-4 w-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500">
+                        <label for="print-cb-${sectionId}" class="text-sm font-medium text-gray-900 flex-1">${section.title || 'قسم بدون عنوان'}</label>
+                    `;
+                    listContainer.appendChild(div);
+                });
+                
+                printSelectionModal.classList.remove('hidden');
 
-                 // (تصحيح الإحداثيات لـ jsPDF)
-                 // X: تحويل الإحداثي الأيمن للعنصر إلى إحداثي يسار (لأن jsPDF يتوقع إحداثيات من اليسار إلى اليمين)
-                 const x_on_page = rect.left - pageRect.left;
-                 const finalX = (pageRect.width - x_on_page - rect.width) * scaleFactorX;
-
-                 elementsBounds.push({
-                     url: qr.url,
-                     x: finalX,
-                     y: rect.top * scaleFactorY,
-                     width: rect.width * scaleFactorX,
-                     height: rect.height * scaleFactorY
-                 });
-            });
-
-            doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-
-            // (جديد) إضافة رابط قابل للنقر فوق كل QR Code
-            elementsBounds.forEach(bound => {
-                doc.link(bound.x, bound.y, bound.width, bound.height, { url: bound.url });
-            });
-
-            document.body.removeChild(printContainer);
+            } catch (error) {
+                console.error("Error loading sections for print selection:", error);
+                listContainer.innerHTML = '<p class="text-red-500 text-center">حدث خطأ في تحميل بيانات الأقسام.</p>';
+            }
         }
 
 
         /**
-         * الدالة الرئيسية لإنشاء وتنزيل الـ PDF
+         * (جديد) دالة لإظهار اختيار العناصر للطباعة في قسم معين
          */
-        async function generatePdfForSections(specificSectionElement) {
+        async function showItemSelectionForPrint(sectionId) {
+            const sectionData = await getSectionDataById(sectionId);
+            if (!sectionData || !sectionData.items) {
+                showAlert('لا يمكن العثور على بيانات القسم أو عناصره.');
+                return;
+            }
+
+            const modal = document.getElementById('item-print-selection-modal');
+            const listContainer = document.getElementById('item-print-selection-list');
+            const form = document.getElementById('item-print-selection-form');
+            const sectionIdInput = document.getElementById('item-print-selection-section-id');
+            const titleElement = document.getElementById('item-print-selection-title');
+            
+            if (!modal || !listContainer || !form || !sectionIdInput || !titleElement) return;
+
+            titleElement.textContent = `اختيار العناصر للطباعة في: ${sectionData.title || 'قسم بدون عنوان'}`;
+            sectionIdInput.value = sectionId;
+            listContainer.innerHTML = '';
+            
+            if (sectionData.items.length === 0) {
+                 listContainer.innerHTML = '<p class="text-center text-gray-500">لا توجد عناصر في هذا القسم لطباعتها.</p>';
+                 modal.classList.remove('hidden');
+                 return;
+            }
+
+
+            sectionData.items.forEach(item => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'flex items-center space-x-3 p-3 border-b hover:bg-gray-50';
+                itemDiv.innerHTML = `
+                    <input id="item-cb-${item.id}" name="item-to-print" type="checkbox" value="${item.id}" checked class="h-4 w-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500">
+                    <label for="item-cb-${item.id}" class="text-sm font-medium text-gray-900 flex-1 truncate">${replaceEmojis(item.title) || 'عنصر بدون عنوان'}</label>
+                `;
+                listContainer.appendChild(itemDiv);
+            });
+
+            // ربط حدث الإرسال لطباعة العناصر المحددة
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                
+                const checkboxes = form.querySelectorAll('input[name="item-to-print"]:checked');
+                const selectedItemIds = Array.from(checkboxes).map(cb => cb.value);
+                
+                const itemsToPrint = sectionData.items.filter(item => selectedItemIds.includes(item.id));
+
+                if (itemsToPrint.length > 0) {
+                     // طباعة القسم المحدد مع العناصر المختارة فقط
+                    await generatePdfForSections(null, [sectionId], itemsToPrint);
+                } else {
+                    showAlert('الرجاء اختيار عنصر واحد على الأقل للطباعة.');
+                }
+                modal.classList.add('hidden');
+                form.onsubmit = null; // إزالة الحدث لمنع التكرار
+            };
+            
+            modal.classList.remove('hidden');
+            
+            // إغلاق النافذة
+            document.getElementById('close-item-print-selection-modal').onclick = () => { modal.classList.add('hidden'); form.onsubmit = null; };
+        }
+
+
+        /**
+         * (مُعدَّل) الدالة الرئيسية لإنشاء وتنزيل الـ PDF
+         * تقبل الآن مصفوفة من أقسام محددة للطباعة (selectedSectionIds) 
+         * أو قائمة عناصر محددة (itemsOverride) إذا كانت الطباعة لـ قسم واحد فقط
+         */
+        async function generatePdfForSections(specificSectionElement, selectedSectionIds = null, itemsOverride = null) {
 
             if (!pdfSpinnerModal) return; 
             pdfSpinnerModal.classList.remove('hidden');
@@ -2341,25 +2257,39 @@
             });
 
             try {
-                 const sectionsToPrintElements = specificSectionElement
-                      ? [specificSectionElement]
-                      : (sectionsContainer ? Array.from(sectionsContainer.querySelectorAll('.column-wrapper')) : []); 
+                 let sectionsToProcess = [];
 
-
-                 const sectionsData = [];
-                 for (const el of sectionsToPrintElements) {
-                      if (el && el.dataset && el.dataset.sectionId) {
-                          const data = await getSectionDataById(el.dataset.sectionId);
-                          if (data) sectionsData.push(data);
-                      }
+                 if (specificSectionElement) {
+                     // طباعة قسم واحد فقط (من زر الطباعة في القسم)
+                     const data = await getSectionDataById(specificSectionElement.dataset.sectionId);
+                     if (data) {
+                         // إذا كان هناك تجاوز للعناصر (اختيار عناوين محددة)
+                         data.items = itemsOverride || data.items;
+                         sectionsToProcess.push(data);
+                     }
+                 } else if (selectedSectionIds && selectedSectionIds.length > 0) {
+                     // طباعة أقسام متعددة (من زر طباعة الكل)
+                     for (const sectionId of selectedSectionIds) {
+                         const data = await getSectionDataById(sectionId);
+                         if (data) sectionsToProcess.push(data);
+                     }
+                 } else {
+                     // حالة الطباعة الافتراضية القديمة (تجنبها الآن باستخدام النافذة الجديدة)
+                     showAlert("الرجاء اختيار قسم واحد على الأقل للطباعة.", 'info');
+                     return;
                  }
+                 
+                 // (جديد) الترتيب حسب الترتيب في قاعدة البيانات (order)
+                 sectionsToProcess.sort((a, b) => (a.order || 0) - (b.order || 0));
+
 
                  let isFirstPage = true;
 
-                 for (const section of sectionsData) {
+                 for (const section of sectionsToProcess) {
                       const items = (section && Array.isArray(section.items)) ? section.items : [];
                       const sectionTitle = (section && section.title) ? section.title : 'قسم بدون عنوان';
 
+                      // تقسيم العناصر إلى مجموعات (5 عناصر لكل صفحة PDF)
                       const itemChunks = chunkArray(items, 5); 
 
                       if (itemChunks.length === 0) {
@@ -2376,12 +2306,12 @@
                  if (!isFirstPage) { 
                      doc.save('تقرير-الراشدون.pdf');
                  } else {
-                     showAlert("لا يوجد محتوى لطباعته.");
+                     showAlert("لا يوجد محتوى لطباعته.", 'info');
                  }
 
             } catch (error) {
                 console.error("خطأ في إنشاء ملف PDF:", error);
-                showAlert("حدث خطأ أثناء إنشاء ملف PDF.");
+                showAlert("حدث خطأ أثناء إنشاء ملف PDF.", 'error');
             } finally {
                 if (pdfSpinnerModal) pdfSpinnerModal.classList.add('hidden');
             }
@@ -2734,7 +2664,7 @@
             
             chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
         }
-        
+
         /**
          * (جديد) رسم قائمة الدردشات الخاصة (المديرين أو المستخدمين)
          */
@@ -3033,7 +2963,7 @@
         
         <div id="chat-list-view" class="flex flex-col h-full">
             <div class="flex justify-between items-center p-3 bg-blue-600 text-white">
-                <h3 id="chat-list-header-title" class="font-bold">الدردشات</h3>
+                <h3 class="font-bold">الدردشات</h3>
                 <button id="close-chat" class="text-white text-2xl">&times;</button>
             </div>
             
@@ -3153,6 +3083,7 @@
                 <button id="close-section-modal" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button>
             </div>
             <form id="add-section-form">
+                <input type="hidden" id="section-order">
                 <div class="space-y-4">
                     <div>
                         <label for="section-title" class="block text-sm font-medium text-gray-700 mb-1">عنوان القسم</label>
@@ -3285,6 +3216,50 @@
              </div>
          </div>
      </div>
+     
+     <!-- (جديد) نافذة اختيار أقسام الطباعة للطباعة الكلية -->
+     <div id="print-selection-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 class="text-2xl font-bold text-gray-800">اختر الأقسام للطباعة</h3>
+                <button id="close-print-selection-modal" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button>
+            </div>
+            <form id="print-selection-form">
+                <div class="flow-root max-h-80 overflow-y-auto bg-gray-50 rounded-lg p-3">
+                    <div id="print-selection-list">
+                        <!-- تُملأ آلياً بواسطة loadSectionsForPrintSelection -->
+                        <p class="text-center text-gray-500">جاري تحميل الأقسام...</p>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button type="button" id="cancel-print-selection" onclick="document.getElementById('print-selection-modal').classList.add('hidden')" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">إلغاء</button>
+                    <button type="submit" id="confirm-print-sections" class="py-2 px-5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-semibold">طباعة الأقسام المختارة</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+     <!-- (جديد) نافذة اختيار عناصر القسم للطباعة -->
+     <div id="item-print-selection-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[80] p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+            <div class="flex justify-between items-center border-b pb-3 mb-4">
+                <h3 id="item-print-selection-title" class="text-2xl font-bold text-gray-800">اختيار العناصر للطباعة</h3>
+                <button id="close-item-print-selection-modal" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button>
+            </div>
+            <form id="item-print-selection-form">
+                <input type="hidden" id="item-print-selection-section-id">
+                <div class="flow-root max-h-80 overflow-y-auto bg-gray-50 rounded-lg p-3">
+                    <div id="item-print-selection-list">
+                        <!-- تُملأ آلياً بواسطة showItemSelectionForPrint -->
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button type="button" onclick="document.getElementById('item-print-selection-modal').classList.add('hidden')" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">إلغاء</button>
+                    <button type="submit" class="py-2 px-5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-semibold">طباعة العناصر المختارة</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
 
 </body>
