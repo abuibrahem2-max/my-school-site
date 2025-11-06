@@ -278,6 +278,43 @@
             outline: none;
             box-shadow: none;
         }
+
+        /* --- (جديد) أنماط منتقي الأيقونات --- */
+        .icon-picker {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .icon-picker-item {
+            cursor: pointer;
+            font-size: 1.5rem; /* 24px */
+            padding: 4px;
+            border-radius: 4px;
+            transition: background-color 0.2s, transform 0.2s;
+            border: 2px solid transparent;
+        }
+        .icon-picker-item:hover {
+            background-color: #e9e9e9;
+            transform: scale(1.1);
+        }
+        .icon-picker-item.selected {
+            border-color: #008080; /* Teal */
+            background-color: #e0f2f1; /* Light Teal */
+        }
+        
+        /* (جديد) أيقونة عنوان القسم */
+        .section-title-icon {
+            font-size: 1.5rem; /* 24px */
+            margin-left: 8px; /* margin-right in LTR */
+            flex-shrink: 0;
+        }
+        /* --- نهاية أنماط الأيقونات --- */
         
     </style>
 
@@ -363,6 +400,10 @@
         };
         // --- نهاية متغيرات الدردشة ---
 
+
+        // --- (جديد) متغيرات الأيقونات ---
+        const PREDEFINED_ICONS = ['📚', '💡', '🔗', '📋', '📁', '🎓', '⭐', '🚀', '🎯', '🔎', '🔔', '👤', '🌍', '📈', '🔧', '✅', '⚠️', '🏠', '📅', '💬'];
+        const DEFAULT_ICON = '📚';
 
         // --- 2. عناصر الصفحة (DOM) ---
         let sectionsContainer;
@@ -475,6 +516,58 @@
                 });
             });
         });
+
+        
+        /**
+         * (جديد) دالة مساعدة لإنشاء منتقي الأيقونات
+         */
+        function createIconPicker(containerId, hiddenInputId) {
+            const container = document.getElementById(containerId);
+            const hiddenInput = document.getElementById(hiddenInputId);
+            if (!container || !hiddenInput) return;
+
+            container.innerHTML = '';
+            PREDEFINED_ICONS.forEach(icon => {
+                const span = document.createElement('span');
+                span.className = 'icon-picker-item';
+                span.textContent = icon;
+                span.dataset.icon = icon;
+                span.title = icon;
+                
+                span.addEventListener('click', () => {
+                    // إزالة 'selected' من جميع العناصر الأخرى في هذا المنتقي
+                    container.querySelectorAll('.icon-picker-item').forEach(item => {
+                        item.classList.remove('selected');
+                    });
+                    // إضافة 'selected' لهذا العنصر
+                    span.classList.add('selected');
+                    // تعيين قيمة الحقل المخفي
+                    hiddenInput.value = icon;
+                });
+                container.appendChild(span);
+            });
+        }
+        
+        /**
+         * (جديد) دالة مساعدة لضبط الأيقونة المحددة في المنتقي
+         */
+        function setSelectedIcon(containerId, hiddenInputId, icon) {
+            const container = document.getElementById(containerId);
+            const hiddenInput = document.getElementById(hiddenInputId);
+            if (!container || !hiddenInput) return;
+
+            const iconToSelect = icon || DEFAULT_ICON;
+            hiddenInput.value = iconToSelect;
+            
+            container.querySelectorAll('.icon-picker-item').forEach(item => {
+                if (item.dataset.icon === iconToSelect) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        }
+
         
         /**
          * الاستماع لتغييرات المصادقة
@@ -825,8 +918,15 @@
              cancelSectionModalBtn = document.getElementById('cancel-section-modal');
              const addSectionBtn = document.getElementById('add-section-btn');
 
+             // (جديد) تهيئة منتقي الأيقونات
+             createIconPicker('add-section-icon-picker', 'section-icon');
+
+
              if (addSectionBtn) {
                  addSectionBtn.addEventListener('click', () => {
+                     // (جديد) تعيين الأيقونة الافتراضية عند الفتح
+                     setSelectedIcon('add-section-icon-picker', 'section-icon', DEFAULT_ICON);
+                     
                      addSectionModal.classList.remove('hidden');
                      setTimeout(() => {
                          if (addSectionModalContent) {
@@ -845,6 +945,8 @@
                  setTimeout(() => {
                      addSectionModal.classList.add('hidden');
                      if (addSectionForm) addSectionForm.reset();
+                     // (جديد) إعادة تعيين الأيقونة الافتراضية عند الإغلاق
+                     setSelectedIcon('add-section-icon-picker', 'section-icon', DEFAULT_ICON);
                  }, 200);
              };
 
@@ -858,8 +960,7 @@
         function setupAddItemModal() {
             addItemModal = document.getElementById('add-item-modal');
             if (!addItemModal) return;
-
-            modalContent = document.getElementById('modal-content');
+modalContent = document.getElementById('modal-content');
             closeModalBtn = document.getElementById('close-modal');
             cancelModalBtn = document.getElementById('cancel-modal');
             addItemForm = document.getElementById('add-item-form');
@@ -945,6 +1046,8 @@
             
             const editSectionVisibilityCheckbox = document.getElementById('edit-section-visibility'); 
 
+            // (جديد) تهيئة منتقي الأيقونات لنافذة التعديل
+            createIconPicker('edit-section-icon-picker', 'edit-section-icon');
             
              if (!sectionsContainer) return;
             sectionsContainer.addEventListener('click', async (e) => { 
@@ -961,11 +1064,14 @@
 
                     const sectionTitle = sectionData.title || '';
                     const isVisible = sectionData.isVisible !== false; // القيمة الافتراضية هي true
-
+                    const sectionIcon = sectionData.icon || DEFAULT_ICON; // (جديد) جلب الأيقونة
 
                    if(editSectionTitleInput) editSectionTitleInput.value = sectionTitle;
                     if (editSectionIdInput) editSectionIdInput.value = sectionId;
                     if (editSectionVisibilityCheckbox) editSectionVisibilityCheckbox.checked = isVisible; 
+                    
+                    // (جديد) تعيين الأيقونة المحددة حالياً
+                    setSelectedIcon('edit-section-icon-picker', 'edit-section-icon', sectionIcon);
 
                     await loadEditorsForSection(sectionId);
 
@@ -1464,9 +1570,12 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
             e.preventDefault();
              const titleInput = document.getElementById('section-title');
              const visibilityCheckbox = document.getElementById('section-visibility'); 
+             const iconInput = document.getElementById('section-icon'); // (جديد)
+             
             if (!titleInput) return;
             const newTitle = titleInput.value.trim();
             const isVisible = visibilityCheckbox ? visibilityCheckbox.checked : true; 
+            const newIcon = iconInput ? iconInput.value : DEFAULT_ICON; // (جديد)
             
             // (جديد) استخدام عدد الأقسام الحالية كترتيب
             const sectionsSnapshot = await getDocs(sectionsCollectionRef);
@@ -1481,6 +1590,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                  }
                 await addDoc(sectionsCollectionRef, {
                     title: newTitle,
+                    icon: newIcon, // (جديد) حفظ الأيقونة
                     items: [],
                     editors: [],
                     isVisible: isVisible, 
@@ -1493,8 +1603,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                 showAlert("❌ فشل إضافة القسم. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
-
-        /**
+/**
          * (Read) الاستماع وعرض الأقسام والعناصر
          */
         function listenForSections() {
@@ -1647,7 +1756,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
 
 
         /**
-         * (Update) معالجة تعديل عنوان القسم وحالة الرؤية
+         * (Update) معالجة تعديل عنوان القسم وحالة الرؤية والأيقونة
          */
         async function handleEditSectionFormSubmit(e) {
             e.preventDefault();
@@ -1655,6 +1764,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
             const sectionId = editSectionIdInput ? editSectionIdInput.value : '';
             const editSectionVisibilityCheckbox = document.getElementById('edit-section-visibility'); 
             const newVisibility = editSectionVisibilityCheckbox ? editSectionVisibilityCheckbox.checked : true;
+            const newIcon = document.getElementById('edit-section-icon')?.value || DEFAULT_ICON; // (جديد)
 
             if (!newTitle || !sectionId) return;
 
@@ -1666,7 +1776,8 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                 const sectionRef = doc(db, sectionsPath, sectionId);
                 await updateDoc(sectionRef, {
                     title: newTitle,
-                    isVisible: newVisibility 
+                    isVisible: newVisibility,
+                    icon: newIcon // (جديد) تحديث الأيقونة
                 });
                 if(editSectionModal) editSectionModal.classList.add('hidden');
             } catch (error) {
@@ -1906,6 +2017,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
             const sectionId = doc.id;
             const editors = section.editors || []; 
             const userCanEditThisSection = currentUserRole !== 'suspended' && (isUserAdmin || editors.includes(currentUserName)); 
+            const sectionIcon = section.icon || DEFAULT_ICON; // (جديد)
             
             const isVisibleToAll = section.isVisible !== false; 
 
@@ -1929,8 +2041,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                     </div>
                 ` : ''}
                 <h2 class="text-2xl font-bold text-teal-800 flex items-center gap-3 flex-1 min-w-0">
-                    <svg class="w-7 h-7 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 019 9v.375M10.125 2.25A3.375 3.375 0 0113.5 5.625v1.5c0 .621.504 1.125 1.125 1.125h1.5a3.375 3.375 0 013.375 3.375M9 15l2.25 2.25L15 12" /></svg>
-                    <span class="section-title-text ">${section.title || 'قسم بدون عنوان'}</span>
+                    <span class="section-title-icon">${sectionIcon}</span> <span class="section-title-text ">${section.title || 'قسم بدون عنوان'}</span>
                 </h2>
                 <div class="flex items-center gap-2 flex-shrink-0">
                     ${userCanEditThisSection ? ` 
@@ -1995,8 +2106,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
             itemDiv.className = "group item-card bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative item-wrapper flex items-center";
             itemDiv.dataset.itemId = item.id;
             itemDiv.dataset.sectionId = sectionId;
-
-            let href = item.url || '#';
+let href = item.url || '#';
             let target = (item.type === 'link' && item.url) ? 'target="_blank" rel="noopener noreferrer"' : '';
             let download = (item.type === 'file') ? `download="${item.title || 'file'}"` : '';
             
@@ -2054,7 +2164,8 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                         <span class="block ">${formattedTitle || 'عنصر بدون عنوان'}</span>
                     </a>
                 </div>
-<div class="flex items-center gap-1 flex-shrink-0 mr-2 relative"> 
+
+                <div class="flex items-center gap-1 flex-shrink-0 mr-2 relative"> 
                     
                     <button class="item-share-btn p-1 text-green-500 hover:text-green-600 transition-colors flex-shrink-0" title="مشاركة عبر واتساب">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
@@ -2474,8 +2585,10 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                  showAlert("لم يتم العثور على بيانات القسم للمشاركة.");
                  return;
              }
+             
+             const sectionIcon = sectionData.icon || ''; // (جديد)
 
-             let message = `*${sectionData.title || 'قسم بدون عنوان'}*\n\n`; 
+             let message = `*${sectionIcon} ${sectionData.title || 'قسم بدون عنوان'}*\n\n`; // (جديد)
              const items = sectionData.items || [];
              if (items.length > 0) {
                  items.forEach(item => {
@@ -2516,9 +2629,9 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
 
         /**
          * (معدلة) دالة مساعدة لإنشاء صفحة PDF واحدة من كود HTML
-         * (جديد) إضافة متغير "reportTitle"
+         * (جديد) إضافة متغير "reportTitle" و "sectionIcon"
          */
-        async function createPdfPageFromHTML(doc, sectionTitle, itemChunk, isFirstPage, reportTitle = "تقرير منصة الراشدون") {
+        async function createPdfPageFromHTML(doc, sectionTitle, sectionIcon, itemChunk, isFirstPage, reportTitle = "تقرير منصة الراشدون") {
             const printContainer = document.createElement('div');
             printContainer.className = 'print-container';
 
@@ -2545,7 +2658,8 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
 
             const titleDiv = document.createElement('div');
             titleDiv.className = 'print-section-title';
-            titleDiv.textContent = sectionTitle || 'قسم بدون عنوان';
+            // (جديد) إضافة الأيقونة لعنوان القسم
+            titleDiv.textContent = `${sectionIcon} ${sectionTitle || 'قسم بدون عنوان'}`;
             sectionDiv.appendChild(titleDiv);
 
             const listDiv = document.createElement('div');
@@ -2694,15 +2808,16 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                  for (const section of sectionsData) {
                       const items = (section && Array.isArray(section.items)) ? section.items : [];
                       const sectionTitle = (section && section.title) ? section.title : 'قسم بدون عنوان';
+                      const sectionIcon = section.icon || DEFAULT_ICON; // (جديد)
 
                       const itemChunks = chunkArray(items, 5); // 5 عناصر في كل صفحة
 
                       if (itemChunks.length === 0) {
-                           await createPdfPageFromHTML(doc, sectionTitle, [], isFirstPage);
+                           await createPdfPageFromHTML(doc, sectionTitle, sectionIcon, [], isFirstPage); // (جديد)
                            isFirstPage = false;
                       } else {
                            for (const chunk of itemChunks) {
-                                await createPdfPageFromHTML(doc, sectionTitle, chunk, isFirstPage);
+                                await createPdfPageFromHTML(doc, sectionTitle, sectionIcon, chunk, isFirstPage); // (جديد)
                                 isFirstPage = false;
                            }
                       }
@@ -2740,9 +2855,11 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                 return null;
             }
         }
-// =================================================================
+
+        // =================================================================
         // == (جديد) بدء منطق الدردشة المدمج ==
         // =================================================================
+        // (الكود التالي مكرر من النسخة الأصلية ولم يتغير)
 
         /**
          * (جديد) بدء تشغيل منطق الدردشة
@@ -3504,10 +3621,15 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                 <button id="close-section-modal" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button>
             </div>
             <form id="add-section-form">
-                <div class="space-y-4">
+                <input type="hidden" id="section-icon" value="📚"> <div class="space-y-4">
                     <div>
                         <label for="section-title" class="block text-sm font-medium text-gray-700 mb-1">عنوان القسم</label>
                         <input type="text" id="section-title" name="section-title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">اختر أيقونة للقسم</label>
+                        <div id="add-section-icon-picker" class="icon-picker">
+                            </div>
                     </div>
                     <div class="flex items-center">
                         <input id="section-visibility" type="checkbox" checked class="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500">
@@ -3534,10 +3656,15 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
             </div>
             <form id="edit-section-form">
                 <input type="hidden" id="edit-section-id">
-                <div class="space-y-4">
+                <input type="hidden" id="edit-section-icon" value="📚"> <div class="space-y-4">
                     <div>
                         <label for="edit-section-title" class="block text-sm font-medium text-gray-700 mb-1">عنوان القسم</label>
                         <input type="text" id="edit-section-title" required class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">اختر أيقونة للقسم</label>
+                        <div id="edit-section-icon-picker" class="icon-picker">
+                            </div>
                     </div>
                     <div class="flex items-center">
                         <input id="edit-section-visibility" type="checkbox" class="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500">
