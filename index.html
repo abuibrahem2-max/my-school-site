@@ -196,7 +196,7 @@
             font-weight: 600;
         }
         
-        /* (تعديل) نمط مقبض السحب والإفلات */
+        /* (تعديل) نمط مقبض السحب والإفلات (للعناصر) */
         .drag-handle {
             cursor: move;
             flex-shrink: 0;
@@ -204,12 +204,25 @@
             padding: 4px;
             border-radius: 4px;
             transition: background-color 0.2s;
-            /* (جديد) تطبيق لون تركوازي غامق */
             color: #008080; 
         }
         .drag-handle:hover {
             background-color: #f3f4f6; /* gray-100 */
             color: #008080; /* تثبيت اللون في حالة التحويم */
+        }
+        
+        /* (جديد) نمط مقبض السحب والإفلات (للأقسام) */
+        .section-drag-handle {
+            cursor: move;
+            flex-shrink: 0;
+            padding: 0.5rem; /* 8px */
+            color: #6b7280; /* gray-500 */
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .section-drag-handle:hover {
+            background-color: #f3f4f6; /* gray-100 */
+            color: #1f2937; /* gray-800 */
         }
         
         /* (جديد) تأكد من أن البطاقة قابلة للسحب ولكن السحب يتم عبر المقبض فقط */
@@ -328,6 +341,8 @@
 
         // متغيرات لإدارة المستمعين (Listeners)
         let permissionRequestsUnsubscribe = null; 
+        let userDocUnsubscribe = null; // (جديد) مستمع لمراقبة دور المستخدم
+        let sectionSortingInstance = null; // (جديد) متغير لـ Sortable.js الخاص بالأقسام
 
         // --- (جديد) متغيرات الدردشة ---
         let chatAllUsers = {}; 
@@ -466,33 +481,42 @@
          */
         function listenToAuthChanges() {
              onAuthStateChanged(auth, async (user) => {
+                 
+                 // (جديد) إيقاف المستمعات القديمة عند تغيير المستخدم
+                 if (userDocUnsubscribe) {
+                     userDocUnsubscribe();
+                     userDocUnsubscribe = null;
+                 }
+                 if (permissionRequestsUnsubscribe) {
+                     permissionRequestsUnsubscribe();
+                     permissionRequestsUnsubscribe = null;
+                 }
+                 
                  if (user) {
                      userId = user.uid;
                      currentUserEmail = user.email || 'غير مسجل';
                      
-                     // 1. إخفاء رسالة التحميل وعرض واجهة الدخول إذا كانت مفتوحة
                      if (initialLoadingMessage) initialLoadingMessage.classList.add('hidden');
 
-                     // 2. جلب بيانات المستخدم من Firestore
                      const userDocRef = doc(db, usersPath, userId);
                      const userDocSnap = await getDoc(userDocRef);
                      
+                     let initialUserData;
+                     
                      if (userDocSnap.exists()) {
-                         const userData = userDocSnap.data();
-                         currentUserName = userData.name || currentUserEmail;
-                         currentUserRole = userData.role || 'viewer';
+                         initialUserData = userDocSnap.data();
+                         currentUserName = initialUserData.name || currentUserEmail;
+                         currentUserRole = initialUserData.role || 'viewer';
                          isUserAdmin = (currentUserRole === 'admin');
                      } else {
-                          // إذا كان المستخدم مصدقًا في Auth ولكنه غير موجود في Firestore،
-                          // يجب إنشاء وثيقة له أولاً لتجنب الأخطاء في باقي التطبيق
                           const name = user.displayName || currentUserEmail.split('@')[0] || 'مستخدم جديد';
-                          const userData = {
+                          initialUserData = {
                              name: name,
                              email: currentUserEmail,
                              role: 'viewer',
                              createdAt: serverTimestamp()
                           };
-                          await setDoc(userDocRef, userData, { merge: true });
+                          await setDoc(userDocRef, initialUserData, { merge: true });
                           
                           currentUserName = name; 
                           currentUserRole = 'viewer';
@@ -501,17 +525,18 @@
 
                      if (loginModal) loginModal.classList.add('hidden');
                      
-                     // (تعديل) نضمن أن الوظيفة تبدأ مرة واحدة فقط
                      if (!isAppInitialized) {
                          initializeAppLogic(currentUserName);
                          isAppInitialized = true;
                      }
 
-
                      if (isUserAdmin) {
                          listenForPermissionRequests();
                      }
-                     updateUserPresence(); // لتسجيل التواجد
+                     updateUserPresence();
+                     
+                     // (جديد) بدء مراقبة التغييرات الفورية على دور المستخدم
+                     listenToUserRoleChanges(userDocRef);
                      
                  } else {
                       // المستخدم غير مسجل الدخول
@@ -520,19 +545,92 @@
                      currentUserEmail = null;
                      currentUserRole = 'viewer';
                      isUserAdmin = false;
-                     isAppInitialized = false; // إعادة تعيين حالة التمهيد
+                     isAppInitialized = false; 
                      
                      updateUIForUser(currentUserName, false);
                      
-                     // إظهار رسالة التحميل الأولية (للتأكد من أن onAuthStateChanged يعمل)
                      if (initialLoadingMessage) initialLoadingMessage.classList.remove('hidden');
-                     
-                     // عرض شاشة الدخول إذا لم يكن المستخدم مصادقًا
                      if (loginModal) loginModal.classList.remove('hidden');
                  }
              });
         }
-/**
+        
+        /**
+         * (جديد) الاستماع للتغييرات الفورية على دور المستخدم
+         * هذه الدالة تعالج الطلب الأول (تحديث الصلاحيات فوراً)
+         */
+        function listenToUserRoleChanges(userDocRef) {
+            if (userDocUnsubscribe) userDocUnsubscribe();
+
+            userDocUnsubscribe = onSnapshot(userDocRef, async (userSnap) => {
+                if (!userSnap.exists()) {
+                    // قد يكون المستخدم قد حُذف، أعده لصفحة الدخول
+                    await signOut(auth);
+                    return;
+                }
+                
+                const userData = userSnap.data();
+                const newRole = userData.role || 'viewer';
+                const newIsAdmin = (newRole === 'admin');
+                const newName = userData.name || currentUserEmail;
+
+                // التحقق مما إذا كان الدور قد تغير فعلاً
+                if (newRole !== currentUserRole) {
+                    console.log(`Role changed from ${currentUserRole} to ${newRole}`);
+                    
+                    currentUserRole = newRole;
+                    isUserAdmin = newIsAdmin;
+                    currentUserName = newName;
+
+                    // 1. إظهار تنبيه للمستخدم
+                    showAlert(newIsAdmin ? '✅ تمت ترقيتك إلى مدير.' : 'ℹ️ تم تحديث صلاحياتك إلى مشاهد.');
+                    
+                    // 2. تحديث الواجهة العلوية (الأزرار)
+                    updateUIForUser(currentUserName, isUserAdmin);
+                    
+                    // 3. تحديث مستمع طلبات الصلاحيات
+                    if (newIsAdmin && !permissionRequestsUnsubscribe) {
+                        listenForPermissionRequests();
+                    } else if (!newIsAdmin && permissionRequestsUnsubscribe) {
+                        permissionRequestsUnsubscribe();
+                        permissionRequestsUnsubscribe = null;
+                        if (permsBtnBadge) permsBtnBadge.classList.add('hidden');
+                    }
+
+                    // 4. (مهم) إعادة رسم الأقسام بالكامل لتطبيق الصلاحيات الجديدة
+                    // (مثل إظهار/إخفاء أزرار التعديل والحذف والسحب)
+                    
+                    const sectionsQuery = query(sectionsCollectionRef, orderBy("order"));
+                    const snapshot = await getDocs(sectionsQuery);
+                    
+                    if (sectionsContainer) sectionsContainer.innerHTML = '';
+                    if(snapshot.empty) {
+                         if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-gray-500 text-center col-span-3">لا توجد أقسام حتى الآن...</p>`;
+                    }
+                    
+                    snapshot.docs.forEach((doc) => {
+                        renderSection(doc);
+                    });
+                    
+                    // 5. إعادة تهيئة سحب العناصر (لتطبيق الصلاحيات الجديدة)
+                    setupItemSorting();
+                    
+                    // 6. إعادة تهيئة سحب الأقسام (لتفعيلها أو تعطيلها)
+                    setupSectionSorting(newIsAdmin);
+                } else if (newName !== currentUserName) {
+                    // تحديث الاسم إذا تغير
+                    currentUserName = newName;
+                    updateUIForUser(currentUserName, isUserAdmin);
+                }
+            }, (error) => {
+                console.error("خطأ فادح في الاستماع لوثيقة المستخدم:", error);
+                // في حالة حدوث خطأ (مثل مشاكل الصلاحيات)، يفضل تسجيل الخروج
+                signOut(auth);
+            });
+        }
+
+
+        /**
          * معالجة إرسال نموذج تسجيل الدخول (بالبريد الإلكتروني وكلمة المرور)
          */
         async function handleLoginSubmit(e) {
@@ -549,13 +647,9 @@
                 return;
             }
             
-            // محاولة تسجيل الدخول
             try {
-                // (جديد) إظهار رسالة تحميل خفيفة أثناء الاتصال
                 showLoginError("جاري تسجيل الدخول..."); 
                 const userCredential = await signInWithEmailAndPassword(auth, email, password);
-                
-                // إذا نجح الدخول، فإن onAuthStateChanged سيتولى باقي الأمور
                 if (loginError) loginError.classList.add('hidden');
                 
             } catch (error) {
@@ -563,6 +657,7 @@
                 switch (error.code) {
                     case 'auth/user-not-found':
                     case 'auth/wrong-password':
+                    case 'auth/invalid-credential': // (جديد) للنسخ الأحدث
                         errorMessage = "خطأ في البريد الإلكتروني أو كلمة المرور.";
                         break;
                     case 'auth/invalid-email':
@@ -598,12 +693,10 @@
             }
             
             try {
-                 // (جديد) إظهار رسالة تحميل خفيفة أثناء الاتصال
                  showLoginError("جاري إنشاء الحساب..."); 
                  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                  const newUser = userCredential.user;
                  
-                 // تسجيل بيانات المستخدم في Firestore
                  const role = (email === DEFAULT_ADMIN_EMAIL) ? 'admin' : 'viewer';
                  
                  await setDoc(doc(db, usersPath, newUser.uid), {
@@ -652,10 +745,8 @@
         function initializeAppLogic(userName) {
              if (!userName) return;
 
-            // تم تحديث isUserAdmin بناءً على Firestore في listenToAuthChanges
             updateUIForUser(userName, isUserAdmin);
 
-            // تهيئة جميع النوافذ المنبثقة (المنصة)
             setupAddSectionModal();
             setupAddItemModal();
             setupEditSectionModal();
@@ -664,9 +755,7 @@
             setupAdminManageModal();
             setupAdminPermsModal();
             
-            // تهيئة نافذة الدردشة المدمجة
             setupChatWindow(); 
-            // بدء منطق الدردشة
             initializeChatApp();
 
             setupControlEvents(isUserAdmin);
@@ -681,7 +770,6 @@
                  userNameDisplay.textContent = `مرحباً بك، ${name} (${isAdmin ? 'مدير' : 'مشاهد'})`;
              } 
 
-            // يجب استخدام adminControls و generalControls هنا بعد أن أصبحت متغيرة عالمية
             adminControls.forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) {
@@ -703,15 +791,20 @@
                 }
             });
             
-            // إدارة أزرار تسجيل الدخول/الخروج
             if (logoutBtn && loginAdminBtn) {
-                if (userId) { // إذا كان هناك مستخدم مسجل الدخول (سواء مدير أو مشاهد)
+                if (userId) { 
                     logoutBtn.classList.remove('hidden');
                     loginAdminBtn.classList.add('hidden');
                 } else {
                     logoutBtn.classList.add('hidden');
                     loginAdminBtn.classList.remove('hidden'); 
                 }
+            }
+            
+            // (جديد) تحديث زر حذف الدردشات في شريط التحكم
+            const deleteAllChatBtnNav = document.getElementById('delete-all-chat-btn');
+            if (deleteAllChatBtnNav) {
+                deleteAllChatBtnNav.classList.toggle('hidden', !isAdmin);
             }
         }
 
@@ -850,7 +943,6 @@
             currentEditorsList = document.getElementById('current-editors-list');
             currentEditorsContainer = document.getElementById('current-editors-container');
             
-            // (جديد) عنصر خانة الاختيار للتحكم في الرؤية
             const editSectionVisibilityCheckbox = document.getElementById('edit-section-visibility'); 
 
             
@@ -864,7 +956,6 @@
                     if (!sectionEl) return;
                     const sectionId = sectionEl.dataset.sectionId;
                     
-                    // (جديد) جلب بيانات القسم المحدثة
                     const sectionData = await getSectionDataById(sectionId);
                     if (!sectionData) return;
 
@@ -874,7 +965,7 @@
 
                    if(editSectionTitleInput) editSectionTitleInput.value = sectionTitle;
                     if (editSectionIdInput) editSectionIdInput.value = sectionId;
-                    if (editSectionVisibilityCheckbox) editSectionVisibilityCheckbox.checked = isVisible; // تحديث حالة الـ checkbox
+                    if (editSectionVisibilityCheckbox) editSectionVisibilityCheckbox.checked = isVisible; 
 
                     await loadEditorsForSection(sectionId);
 
@@ -905,12 +996,12 @@
             editItemForm = document.getElementById('edit-item-form');
             editItemTitleInput = document.getElementById('edit-item-title');
             editItemLinkInput = document.getElementById('edit-item-link');
-            editItemIdInput = document.getElementById('edit-item-id'); // المتغير الصحيح
+            editItemIdInput = document.getElementById('edit-item-id'); 
             editItemSectionIdInput = document.getElementById('edit-item-section-id');
 
              if (!sectionsContainer) return;
             sectionsContainer.addEventListener('click', (e) => {
-                const editBtn = e.target.closest('.item-edit-btn-action'); // منبثق جديد
+                const editBtn = e.target.closest('.item-edit-btn-action'); 
                  const sectionEl = editBtn ? editBtn.closest('.column-wrapper') : null;
                  const canEdit = isUserAdmin || (sectionEl && sectionEl.dataset.canEdit === 'true');
 
@@ -918,7 +1009,6 @@
                     const itemEl = editBtn.closest('.item-card');
                     if (!itemEl || !sectionEl) return;
 
-                    // إخفاء الـ popup مباشرة بعد النقر على زر التعديل
                     const popup = editBtn.closest('.item-action-popup');
                     if (popup) popup.classList.add('hidden');
 
@@ -931,7 +1021,6 @@
 
                     if(editItemTitleInput) editItemTitleInput.value = title;
                     if(editItemLinkInput) editItemLinkInput.value = link;
-                    // تم تصحيح الخطأ المطبعي هنا: كان يستخدم 'editItemItemIdInput'
                     if(editItemIdInput) editItemIdInput.value = itemId; 
                     if(editItemSectionIdInput) editItemSectionIdInput.value = sectionId;
 
@@ -956,7 +1045,6 @@
             const itemCard = button.closest('.item-card');
             const popup = itemCard ? itemCard.querySelector('.item-action-popup') : null;
             if (popup) {
-                // إخفاء جميع النوافذ المنبثقة الأخرى قبل إظهار هذه
                 document.querySelectorAll('.item-action-popup:not(.hidden)').forEach(p => p.classList.add('hidden'));
                 popup.classList.toggle('hidden');
             }
@@ -983,10 +1071,9 @@
 
         function setupChatWindow() {
             const chatToggle = document.getElementById('chat-toggle');
-            // (تعديل) التأكد من أن جميع متغيرات الدردشة معرفة
             chatWindow = document.getElementById('chat-window');
-            closeChatBtn1 = document.getElementById('close-chat'); // من قائمة الدردشة
-            closeChatBtn2 = document.getElementById('close-chat-2'); // من نافذة الرسائل
+            closeChatBtn1 = document.getElementById('close-chat'); 
+            closeChatBtn2 = document.getElementById('close-chat-2'); 
             chatBackBtn = document.getElementById('chat-back-btn');
             
             chatListView = document.getElementById('chat-list-view');
@@ -996,27 +1083,22 @@
                 return;
             }
 
-            // زر فتح/إغلاق النافذة الرئيسية
             chatToggle.addEventListener('click', () => {
                 chatWindow.classList.toggle('hidden');
                 if (!chatWindow.classList.contains('hidden')) {
-                    // عند الفتح، تأكد من أننا في قائمة الدردشة
                     chatListView.classList.remove('hidden');
                     chatMessageView.classList.add('hidden');
                 }
             });
 
-            // أزرار الإغلاق
             const closeChat = () => chatWindow.classList.add('hidden');
             closeChatBtn1.addEventListener('click', closeChat);
             closeChatBtn2.addEventListener('click', closeChat);
 
-            // زر الرجوع (من الرسائل إلى القائمة)
             chatBackBtn.addEventListener('click', () => {
                 chatListView.classList.remove('hidden');
                 chatMessageView.classList.add('hidden');
                 
-                // إيقاف الاستماع للرسائل عند الرجوع
                 if (chatMessageListeners[chatCurrentChat.id]) {
                     chatMessageListeners[chatCurrentChat.id]();
                     delete chatMessageListeners[chatCurrentChat.id];
@@ -1031,7 +1113,7 @@
             if (!adminManageModal) return;
 
             adminUsersList = document.getElementById('admin-users-list');
-            const closeBtn = document.getElementById('close-admin-manage-modal');
+const closeBtn = document.getElementById('close-admin-manage-modal');
             const adminManageBtn = document.getElementById('admin-manage-btn');
 
             if (adminManageBtn) {
@@ -1211,7 +1293,11 @@
                     await deleteDoc(userRef);
                     showAlert("🗑️ تم حذف المستخدم وجميع صلاحياته بنجاح.");
                 }
-
+                
+                // (ملاحظة: سيتم تحديث واجهة المستخدم المُدار فوراً بفضل 
+                // المستمع الفوري الذي أضفناه في listenToUserRoleChanges)
+                
+                // سنقوم بتحديث هذه القائمة يدوياً
                 await loadUsersForAdminModal();
             } catch (error) {
                 console.error("خطأ أثناء تنفيذ الإجراء:", error);
@@ -1377,11 +1463,14 @@
         async function handleSectionFormSubmit(e) {
             e.preventDefault();
              const titleInput = document.getElementById('section-title');
-             const visibilityCheckbox = document.getElementById('section-visibility'); // (جديد)
+             const visibilityCheckbox = document.getElementById('section-visibility'); 
             if (!titleInput) return;
             const newTitle = titleInput.value.trim();
-            const isVisible = visibilityCheckbox ? visibilityCheckbox.checked : true; // (جديد)
-            const newOrder = Date.now(); // استخدام التوقيت كترتيب افتراضي (يمكنك تعديل هذا إذا كنت تريد ترتيباً مختلفاً)
+            const isVisible = visibilityCheckbox ? visibilityCheckbox.checked : true; 
+            
+            // (جديد) استخدام عدد الأقسام الحالية كترتيب
+            const sectionsSnapshot = await getDocs(sectionsCollectionRef);
+            const newOrder = sectionsSnapshot.size;
 
             if (!newTitle) return;
 
@@ -1394,13 +1483,12 @@
                     title: newTitle,
                     items: [],
                     editors: [],
-                    isVisible: isVisible, // (جديد) إضافة حقل الرؤية
-                    order: newOrder // (جديد) حقل الترتيب
+                    isVisible: isVisible, 
+                    order: newOrder // (جديد) استخدام الترتيب الجديد
                 });
                 const closeButton = document.getElementById('close-section-modal');
                 if (closeButton) closeButton.click();
             } catch (error) {
-                // (جديد) طباعة الخطأ هنا لتحديد المشكلة بالضبط (غالباً ما تكون قواعد أمان)
                 console.error("خطأ في إضافة القسم (تأكد من قواعد الأمان):", error);
                 showAlert("❌ فشل إضافة القسم. (يرجى التحقق من قواعد أمان Firestore).");
             }
@@ -1414,13 +1502,12 @@
                  if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ فادح: لم يتم تهيئة اتصال الأقسام.</p>`;
                  return;
              }
-            // (تعديل) إضافة orderBy إذا كان الترتيب مطلوباً على مستوى الأقسام نفسها
-            const sectionsQuery = query(sectionsCollectionRef);
+            // (تعديل) جلب الأقسام مرتبة حسب الطلب الثاني
+            const sectionsQuery = query(sectionsCollectionRef, orderBy("order"));
 
             onSnapshot(sectionsQuery, (snapshot) => {
                 if (sectionsContainer) sectionsContainer.innerHTML = '';
                 
-                // (جديد) إظهار رسالة عدم وجود أقسام بدلاً من رسالة التحميل
                 if(snapshot.empty) {
                     if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-gray-500 text-center col-span-3">لا توجد أقسام حتى الآن. ${isUserAdmin ? 'قم بإضافة قسم جديد من الزر العلوي.' : 'يرجى الانتظار حتى يقوم المدير بإضافة محتوى.'}</p>`;
                 }
@@ -1429,18 +1516,19 @@
                     renderSection(doc);
                 });
                 
-                // (جديد) تفعيل خاصية السحب والإفلات بعد رسم جميع الأقسام
+                // (جديد) تفعيل خاصية السحب والإفلات للعناصر
                 setupItemSorting();
+                // (جديد) تفعيل خاصية السحب والإفلات للأقسام (الطلب الثاني)
+                setupSectionSorting(isUserAdmin);
 
             }, (error) => {
-                // (جديد) طباعة الخطأ هنا لتحديد المشكلة بالضبط (غالباً ما تكون قواعد أمان)
                 console.error("خطأ في جلب الأقسام (تأكد من قواعد الأمان):", error);
                 if (sectionsContainer) sectionsContainer.innerHTML = `<p class="text-red-500 text-center col-span-3">خطأ في الاتصال بقاعدة البيانات. تأكد من أن قواعد أمان Firestore تسمح بقراءة مجموعة 'sections'.</p>`;
             });
         }
         
         /**
-         * (جديد) إعداد خاصية السحب والإفلات داخل كل قسم
+         * (جديد) إعداد خاصية السحب والإفلات داخل كل قسم (للعناصر)
          */
         function setupItemSorting() {
             const lists = sectionsContainer ? sectionsContainer.querySelectorAll('.column-list') : [];
@@ -1451,10 +1539,10 @@
 
                 if (list && sectionId && canEdit) {
                     Sortable.create(list, {
-                        group: 'shared', // يسمح بسحب العناصر بين الأقسام (يمكن إزالته إذا أردت منع النقل بين الأقسام)
+                        group: 'shared', 
                         animation: 150,
-                        handle: '.drag-handle', // مفتاح التعديل هنا: السحب من مقبض السحب فقط
-                        filter: '.add-item-btn', // لا تسمح بسحب زر الإضافة
+                        handle: '.drag-handle', 
+                        filter: '.add-item-btn', 
                         onEnd: async function (evt) {
                             const newSectionEl = evt.to.closest('.column-wrapper');
                             const oldSectionId = sectionId;
@@ -1466,7 +1554,6 @@
                             const newIndex = evt.newIndex;
                             const itemId = evt.item.dataset.itemId;
                             
-                            // 1. جلب بيانات القسم المحدثة
                             const currentSectionData = await getSectionDataById(oldSectionId);
                             if (!currentSectionData) return;
                             
@@ -1474,14 +1561,11 @@
                             const movedItem = items.find(item => item.id === itemId);
                             if (!movedItem) return;
                             
-                            // 2. معالجة النقل بين الأقسام
                             if (oldSectionId !== newSectionId) {
                                 
-                                // حذف العنصر من القسم القديم
                                 items = items.filter(item => item.id !== itemId);
                                 await updateDoc(doc(db, sectionsPath, oldSectionId), { items: items });
 
-                                // إضافة العنصر للقسم الجديد بالترتيب الصحيح
                                 const newSectionData = await getSectionDataById(newSectionId);
                                 if (!newSectionData) return;
                                 
@@ -1490,24 +1574,75 @@
                                 await updateDoc(doc(db, sectionsPath, newSectionId), { items: newItems });
                                 
                             } 
-                            // 3. معالجة الترتيب داخل نفس القسم
                             else {
-                                // إعادة ترتيب المصفوفة محليا
                                 items.splice(oldIndex, 1);
                                 items.splice(newIndex, 0, movedItem);
 
-                                // حفظ الترتيب الجديد في قاعدة البيانات
                                 await updateDoc(doc(db, sectionsPath, sectionId), { items: items });
                             }
                         }
                     });
                 } else if (list) {
-                    // تعطيل السحب لغير المحررين
                     Sortable.create(list, {
                         disabled: true
                     });
                 }
             });
+        }
+
+        /**
+         * (جديد) إعداد خاصية السحب والإفلات للأقسام (العمود بالكامل) - الطلب الثاني
+         */
+        function setupSectionSorting(isAdmin) {
+            if (sectionSortingInstance) {
+                sectionSortingInstance.destroy();
+                sectionSortingInstance = null;
+            }
+            
+            if (sectionsContainer && isAdmin) {
+                // تفعيل السحب للمدير
+                sectionSortingInstance = Sortable.create(sectionsContainer, {
+                    animation: 150,
+                    handle: '.section-drag-handle', // مقبض السحب الذي أضفناه
+                    onEnd: handleSectionSortEnd // الدالة التي ستنفذ عند انتهاء السحب
+                });
+            } else if (sectionsContainer) {
+                // تعطيل السحب لغير المديرين
+                sectionSortingInstance = Sortable.create(sectionsContainer, {
+                    disabled: true
+                });
+            }
+        }
+
+        /**
+         * (جديد) معالجة انتهاء سحب وترتيب الأقسام - الطلب الثاني
+         */
+        async function handleSectionSortEnd(evt) {
+            if (!sectionsContainer || !isUserAdmin) return;
+
+            // جلب جميع عناصر الأقسام بالترتيب الجديد من الـ DOM
+            const sectionElements = sectionsContainer.querySelectorAll('.column-wrapper');
+            const batch = writeBatch(db);
+
+            try {
+                // تحديث حقل 'order' لكل قسم بناءً على ترتيبه الجديد
+                sectionElements.forEach((sectionEl, index) => {
+                    const sectionId = sectionEl.dataset.sectionId;
+                    if (sectionId) {
+                        const sectionRef = doc(db, sectionsPath, sectionId);
+                        batch.update(sectionRef, { order: index });
+                    }
+                });
+
+                // تنفيذ جميع التحديثات دفعة واحدة
+                await batch.commit();
+                
+            } catch (error) {
+                console.error("خطأ في تحديث ترتيب الأقسام:", error);
+                showAlert("❌ حدث خطأ أثناء حفظ ترتيب الأقسام.");
+                // لا داعي للقلق، مستمع onSnapshot سيقوم بإعادة الأقسام
+                // إلى ترتيبها القديم (الموجود في السيرفر) إذا فشلت العملية
+            }
         }
 
 
@@ -1518,7 +1653,6 @@
             e.preventDefault();
             const newTitle = editSectionTitleInput ? editSectionTitleInput.value.trim() : '';
             const sectionId = editSectionIdInput ? editSectionIdInput.value : '';
-            // (جديد) جلب حالة الرؤية من نافذة التعديل
             const editSectionVisibilityCheckbox = document.getElementById('edit-section-visibility'); 
             const newVisibility = editSectionVisibilityCheckbox ? editSectionVisibilityCheckbox.checked : true;
 
@@ -1532,7 +1666,7 @@
                 const sectionRef = doc(db, sectionsPath, sectionId);
                 await updateDoc(sectionRef, {
                     title: newTitle,
-                    isVisible: newVisibility // (جديد) تحديث حقل الرؤية
+                    isVisible: newVisibility 
                 });
                 if(editSectionModal) editSectionModal.classList.add('hidden');
             } catch (error) {
@@ -1713,8 +1847,6 @@
             const canDelete = isUserAdmin || editors.includes(currentUserName);
 
             if (!canDelete) return;
-            // تم نقل التأكيد إلى النافذة المنبثقة
-            // if (!confirm("هل أنت متأكد أنك تريد حذف هذا العنصر؟")) return;
 
             try {
                 if (sectionSnap.exists()) {
@@ -1727,7 +1859,6 @@
                         items: updatedItems
                     });
                     
-                    // (جديد) إزالة العنصر من سلة الاختيار إذا كان موجوداً
                     selectionBasket = selectionBasket.filter(item => item.id !== itemId);
                     updateSelectionBar();
                 }
@@ -1753,7 +1884,6 @@
                 const sectionRef = doc(db, sectionsPath, sectionId);
                 await deleteDoc(sectionRef);
                 
-                // (جديد) مسح سلة الاختيار بعد حذف قسم، فقد تكون عناصر منه محددة
                 clearSelection();
                 
             } catch (error) {
@@ -1777,16 +1907,11 @@
             const editors = section.editors || []; 
             const userCanEditThisSection = currentUserRole !== 'suspended' && (isUserAdmin || editors.includes(currentUserName)); 
             
-            // ===============================================
-            // منطق إخفاء القسم عن المشاهدين
-            // ===============================================
-            const isVisibleToAll = section.isVisible !== false; // القيمة الافتراضية هي true إذا لم يتم تعيينها
+            const isVisibleToAll = section.isVisible !== false; 
 
             if (!isVisibleToAll && !isUserAdmin) {
-                // إذا كان القسم غير مرئي للجميع والمستخدم ليس مديراً، لا تعرضه.
                 return;
             }
-            // ===============================================
 
             const sectionDiv = document.createElement('div');
             sectionDiv.className = "bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col column-wrapper";
@@ -1795,7 +1920,14 @@
 
             const headerDiv = document.createElement('div');
             headerDiv.className = "column-header p-5 border-b border-gray-200 bg-gray-50 flex justify-between items-center";
+            
+            // (تعديل) إضافة مقبض السحب (الطلب الثاني)
             headerDiv.innerHTML = `
+                ${isUserAdmin ? `
+                    <div class="section-drag-handle" title="سحب وترتيب القسم">
+                        <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+                    </div>
+                ` : ''}
                 <h2 class="text-2xl font-bold text-teal-800 flex items-center gap-3 flex-1 min-w-0">
                     <svg class="w-7 h-7 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.125 2.25h-4.5c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125v-9M10.125 2.25h.375a9 9 0 019 9v.375M10.125 2.25A3.375 3.375 0 0113.5 5.625v1.5c0 .621.504 1.125 1.125 1.125h1.5a3.375 3.375 0 013.375 3.375M9 15l2.25 2.25L15 12" /></svg>
                     <span class="section-title-text ">${section.title || 'قسم بدون عنوان'}</span>
@@ -1819,7 +1951,7 @@
 
             const listDiv = document.createElement('div');
             listDiv.className = "p-4 space-y-3 flex-grow column-list";
-            listDiv.dataset.sectionTitle = section.title || 'قسم بدون عنوان'; // (جديد) إضافة عنوان القسم للبيانات
+            listDiv.dataset.sectionTitle = section.title || 'قسم بدون عنوان'; 
 
             const items = section.items || [];
             if (items.length > 0) {
@@ -1860,7 +1992,6 @@
              if (!item || !item.id) return document.createElement('div');
 
             const itemDiv = document.createElement('div');
-            // (جديد) تعديل الكلاس ليصبح item-card
             itemDiv.className = "group item-card bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative item-wrapper flex items-center";
             itemDiv.dataset.itemId = item.id;
             itemDiv.dataset.sectionId = sectionId;
@@ -1902,8 +2033,6 @@
                  </button>
             ` : '';
 
-            // (جديد) صندوق الاختيار
-            // يظهر فقط إذا كان العنصر قابلاً للمشاركة (يحتوي على رابط)
             const selectionCheckbox = (item.type === 'link' && item.url) ? `
                 <input type="checkbox" 
                        class="item-selection-checkbox" 
@@ -1913,7 +2042,7 @@
                        onchange="handleItemSelection(this)"
                        ${selectionBasket.some(b => b.id === item.id) ? 'checked' : ''}
                        >
-            ` : '<div class="w-5 mr-3"></div>'; // (جديد) عنصر وهمي للحفاظ على التنسيق
+            ` : '<div class="w-5 mr-3"></div>'; 
 
 
             itemDiv.innerHTML = `
@@ -1925,8 +2054,7 @@
                         <span class="block ">${formattedTitle || 'عنصر بدون عنوان'}</span>
                     </a>
                 </div>
-
-                <div class="flex items-center gap-1 flex-shrink-0 mr-2 relative"> 
+<div class="flex items-center gap-1 flex-shrink-0 mr-2 relative"> 
                     
                     <button class="item-share-btn p-1 text-green-500 hover:text-green-600 transition-colors flex-shrink-0" title="مشاركة عبر واتساب">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg>
@@ -2612,11 +2740,9 @@
                 return null;
             }
         }
-
-        // =================================================================
+// =================================================================
         // == (جديد) بدء منطق الدردشة المدمج ==
         // =================================================================
-        // (الكود التالي مكرر من النسخة الأصلية ولم يتغير)
 
         /**
          * (جديد) بدء تشغيل منطق الدردشة
