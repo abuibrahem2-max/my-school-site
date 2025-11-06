@@ -330,7 +330,7 @@
         import { 
             getFirestore, doc, collection, addDoc, onSnapshot, query, 
             updateDoc, arrayUnion, getDoc, setDoc, deleteDoc, getDocs, 
-            where, serverTimestamp, arrayRemove, orderBy, limit, writeBatch
+            where, serverTimestamp, arrayRemove, orderBy, limit, writeBatch, documentId
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
 
@@ -347,7 +347,7 @@
         };
         
         // --- بيانات المدير (سيتم إدارتها عبر قاعدة بيانات المستخدمين) ---
-        const DEFAULT_ADMIN_EMAIL = "admin@rashedon.sa"; // الايميل الافتراضي للمدير
+        const DEFAULT_ADMIN_EMAIL = "abuibrahem2@gmail.com"; // الايميل الافتراضي للمدير
         // ------------------------------
         
         const CHAT_APP_ID = 'rashedon-app';
@@ -361,6 +361,7 @@
         const sectionsPath = `sections`;
         const usersPath = `users`; 
         const permissionRequestsPath = `permissionRequests`;
+        const configPath = 'config'; // (جديد) مسار الإعدادات العامة
 
         // متغيرات لحالة المستخدم (المنصة)
         let currentUserName = null; // اسم المستخدم (من تسجيل الدخول)
@@ -372,13 +373,18 @@
         // (جديد) متغير لسلة الاختيار
         let selectionBasket = []; 
 
-        const adminControls = ['add-section-btn', 'admin-manage-btn', 'admin-perms-btn'];
+        // (تعديل) إضافة زر الإعدادات
+        const adminControls = ['add-section-btn', 'admin-manage-btn', 'admin-perms-btn', 'admin-settings-btn'];
         const generalControls = ['print-sections-btn', 'logout-btn'];
+
+        // (جديد) متغير الإعدادات العامة
+        let globalConfig = { isChatEnabled: true };
 
 
         // متغيرات لإدارة المستمعين (Listeners)
         let permissionRequestsUnsubscribe = null; 
         let userDocUnsubscribe = null; // (جديد) مستمع لمراقبة دور المستخدم
+        let globalConfigUnsubscribe = null; // (جديد) مستمع للإعدادات العامة
         let sectionSortingInstance = null; // (جديد) متغير لـ Sortable.js الخاص بالأقسام
 
         // --- (جديد) متغيرات الدردشة ---
@@ -425,6 +431,7 @@
         let pdfSpinnerModal;
         let adminManageModal, adminUsersList;
         let adminPermsModal, adminPermsList;
+        let adminSettingsModal; // (جديد) نافذة الإعدادات
         let currentEditorsList, currentEditorsContainer; 
         
         // (جديد) أزرار تسجيل الدخول/الخروج
@@ -584,6 +591,10 @@
                      permissionRequestsUnsubscribe();
                      permissionRequestsUnsubscribe = null;
                  }
+                 if (globalConfigUnsubscribe) { // (جديد)
+                     globalConfigUnsubscribe();
+                     globalConfigUnsubscribe = null;
+                 }
                  
                  if (user) {
                      userId = user.uid;
@@ -630,6 +641,8 @@
                      
                      // (جديد) بدء مراقبة التغييرات الفورية على دور المستخدم
                      listenToUserRoleChanges(userDocRef);
+                     // (جديد) بدء مراقبة الإعدادات العامة
+                     listenToGlobalConfig();
                      
                  } else {
                       // المستخدم غير مسجل الدخول
@@ -720,6 +733,52 @@
                 // في حالة حدوث خطأ (مثل مشاكل الصلاحيات)، يفضل تسجيل الخروج
                 signOut(auth);
             });
+        }
+        
+        /**
+         * (جديد) الاستماع للإعدادات العامة (مثل تفعيل/تعطيل الدردشة)
+         */
+        function listenToGlobalConfig() {
+            if (globalConfigUnsubscribe) globalConfigUnsubscribe();
+            
+            const configRef = doc(db, configPath, 'appSettings');
+            
+            globalConfigUnsubscribe = onSnapshot(configRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    globalConfig = docSnap.data();
+                } else {
+                    // إذا لم تكن موجودة، أنشئها بالقيم الافتراضية (للمدير فقط)
+                    if(isUserAdmin) {
+                        setDoc(configRef, { isChatEnabled: true });
+                    }
+                    globalConfig = { isChatEnabled: true };
+                }
+                
+                // تحديث واجهة المستخدم بناءً على الإعدادات الجديدة
+                updateUIChatVisibility(globalConfig.isChatEnabled);
+                
+            }, (error) => {
+                console.error("خطأ في الاستماع للإعدادات العامة:", error);
+                // في حالة الفشل، افترض القيم الافتراضية
+                updateUIChatVisibility(true);
+            });
+        }
+
+        /**
+         * (جديد) تحديث إظهار/إخفاء الدردشة بناءً على الإعدادات العامة
+         */
+        function updateUIChatVisibility(isEnabled) {
+            const chatToggleBtn = document.getElementById('chat-toggle');
+            
+            if (chatToggleBtn) {
+                chatToggleBtn.classList.toggle('hidden', !isEnabled);
+            }
+            
+            if (!isEnabled && chatWindow && !chatWindow.classList.contains('hidden')) {
+                // إذا تم تعطيل الدردشة أثناء فتحها، قم بإغلاقها
+                chatWindow.classList.add('hidden');
+                showAlert("تم تعطيل الدردشة من قبل المدير.");
+            }
         }
 
 
@@ -847,6 +906,7 @@
             setupAlertModal();
             setupAdminManageModal();
             setupAdminPermsModal();
+            setupAdminSettingsModal(); // (جديد)
             
             setupChatWindow(); 
             initializeChatApp();
@@ -899,10 +959,11 @@
             if (deleteAllChatBtnNav) {
                 deleteAllChatBtnNav.classList.toggle('hidden', !isAdmin);
             }
+            
+            // (جديد) تحديث إظهار الدردشة بناءً على الإعدادات العامة
+            updateUIChatVisibility(globalConfig.isChatEnabled);
         }
-
-
-        /**
+/**
          * =============================================
          * تهيئة النوافذ المنبثقة (Modals)
          * =============================================
@@ -960,7 +1021,7 @@
         function setupAddItemModal() {
             addItemModal = document.getElementById('add-item-modal');
             if (!addItemModal) return;
-modalContent = document.getElementById('modal-content');
+            modalContent = document.getElementById('modal-content');
             closeModalBtn = document.getElementById('close-modal');
             cancelModalBtn = document.getElementById('cancel-modal');
             addItemForm = document.getElementById('add-item-form');
@@ -1092,8 +1153,7 @@ modalContent = document.getElementById('modal-content');
                currentEditorsList.addEventListener('click', handleRemoveEditorClick);
            }
         }
-
-        function setupEditItemModal() {
+function setupEditItemModal() {
             editItemModal = document.getElementById('edit-item-modal');
             if (!editItemModal) return;
 
@@ -1219,7 +1279,7 @@ modalContent = document.getElementById('modal-content');
             if (!adminManageModal) return;
 
             adminUsersList = document.getElementById('admin-users-list');
-const closeBtn = document.getElementById('close-admin-manage-modal');
+            const closeBtn = document.getElementById('close-admin-manage-modal');
             const adminManageBtn = document.getElementById('admin-manage-btn');
 
             if (adminManageBtn) {
@@ -1244,7 +1304,9 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                     await updateUserRole(userIdToUpdate, action);
                 });
             }
-        }function setupAdminPermsModal() {
+        }
+        
+        function setupAdminPermsModal() {
             adminPermsModal = document.getElementById('admin-perms-modal');
             if (!adminPermsModal) return;
 
@@ -1277,6 +1339,140 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
 
                     await handlePermissionRequest(requestId, action);
                 });
+            }
+        }
+        
+        /**
+         * (جديد) تهيئة نافذة الإعدادات العامة (الترس)
+         */
+        function setupAdminSettingsModal() {
+            adminSettingsModal = document.getElementById('admin-settings-modal');
+            if (!adminSettingsModal) return;
+            
+            const closeBtn = document.getElementById('close-admin-settings-modal');
+            const adminSettingsBtn = document.getElementById('admin-settings-btn');
+            
+            const chatToggleSwitch = document.getElementById('setting-toggle-chat');
+            const revokeEditorsBtn = document.getElementById('setting-revoke-editors');
+            const revokeAdminsBtn = document.getElementById('setting-revoke-admins');
+            
+            if (adminSettingsBtn) {
+                 adminSettingsBtn.addEventListener('click', () => {
+                     if (!isUserAdmin) return;
+                     
+                     // مزامنة حالة زر الدردشة مع الإعدادات الحالية
+                     if (chatToggleSwitch) {
+                         chatToggleSwitch.checked = globalConfig.isChatEnabled;
+                     }
+                     
+                     adminSettingsModal.classList.remove('hidden');
+                 });
+            }
+            
+            const close = () => adminSettingsModal.classList.add('hidden');
+            if (closeBtn) closeBtn.addEventListener('click', close);
+            adminSettingsModal.addEventListener('click', (e) => (e.target === adminSettingsModal) && close());
+
+            // ربط الأحداث للأزرار داخل النافذة
+            if (chatToggleSwitch) {
+                chatToggleSwitch.addEventListener('change', handleToggleChatSetting);
+            }
+            if (revokeEditorsBtn) {
+                revokeEditorsBtn.addEventListener('click', handleRevokeAllEditors);
+            }
+            if (revokeAdminsBtn) {
+                revokeAdminsBtn.addEventListener('click', handleRevokeOtherAdmins);
+            }
+        }
+        
+        /**
+         * (جديد) معالجة تفعيل/تعطيل الدردشة
+         */
+        async function handleToggleChatSetting(e) {
+            if (!isUserAdmin) return;
+            const isEnabled = e.target.checked;
+            
+            try {
+                const configRef = doc(db, configPath, 'appSettings');
+                await setDoc(configRef, { isChatEnabled: isEnabled }, { merge: true });
+                showAlert(isEnabled ? '✅ تم تفعيل الدردشة للجميع.' : '🚫 تم تعطيل الدردشة للجميع.');
+            } catch (error) {
+                console.error("خطأ في تحديث إعداد الدردشة:", error);
+                showAlert("❌ فشل تحديث إعداد الدردشة.");
+                // إرجاع الزر لحالته السابقة
+                e.target.checked = !isEnabled;
+            }
+        }
+        
+        /**
+         * (جديد) معالجة إلغاء جميع صلاحيات المحررين
+         */
+        async function handleRevokeAllEditors() {
+            if (!isUserAdmin) return;
+            if (!confirm("⚠️ هل أنت متأكد أنك تريد إلغاء صلاحيات التحرير من (جميع) المستخدمين عن (جميع) الأقسام؟")) return;
+            
+            showAlert("جاري إلغاء صلاحيات المحررين... قد يستغرق هذا بعض الوقت.");
+            
+            try {
+                const batch = writeBatch(db);
+                const sectionsQuery = query(sectionsCollectionRef, where("editors", "!=", []));
+                const sectionsSnapshot = await getDocs(sectionsQuery);
+                
+                if (sectionsSnapshot.empty) {
+                     showAlert("ℹ️ لا توجد أقسام لديها صلاحيات محررين لإلغائها.");
+                     return;
+                }
+                
+                sectionsSnapshot.forEach(sectionDoc => {
+                    const sectionRef = doc(db, sectionsPath, sectionDoc.id);
+                    batch.update(sectionRef, { editors: [] });
+                });
+                
+                await batch.commit();
+                showAlert("✅ تم إلغاء جميع صلاحيات التحرير من كل الأقسام بنجاح.");
+                
+            } catch (error) {
+                console.error("خطأ في إلغاء صلاحيات المحررين:", error);
+                showAlert("❌ فشل إلغاء صلاحيات المحررين.");
+            }
+        }
+        
+        /**
+         * (جديد) معالجة إلغاء صلاحيات المدراء الآخرين
+         */
+        async function handleRevokeOtherAdmins() {
+            if (!isUserAdmin || !userId) return;
+            if (!confirm("⚠️ هل أنت متأكد أنك تريد إلغاء صلاحيات (جميع المدراء الآخرين) وتحويلهم إلى مشاهدين؟ (صلاحياتك ستبقى).")) return;
+            
+            showAlert("جاري إلغاء صلاحيات المدراء الآخرين...");
+            
+            try {
+                const batch = writeBatch(db);
+                
+                // الحل البديل: جلب كل المدراء ثم فلترتهم
+                const allAdminsQuery = query(usersCollectionRef, where("role", "==", "admin"));
+                const adminsSnapshot = await getDocs(allAdminsQuery);
+                
+                let demotedCount = 0;
+                adminsSnapshot.forEach(userDoc => {
+                    if (userDoc.id !== userId) { // الفلترة هنا
+                        const userRef = doc(db, usersPath, userDoc.id);
+                        batch.update(userRef, { role: 'viewer' });
+                        demotedCount++;
+                    }
+                });
+                
+                if (demotedCount === 0) {
+                    showAlert("ℹ️ لا يوجد مدراء آخرون لإلغاء صلاحياتهم.");
+                    return;
+                }
+                
+                await batch.commit();
+                showAlert(`✅ تم إلغاء صلاحيات ${demotedCount} مدير بنجاح.`);
+                
+            } catch (error) {
+                console.error("خطأ في إلغاء صلاحيات المدراء:", error);
+                showAlert("❌ فشل إلغاء صلاحيات المدراء. قد تحتاج لإنشاء فهرس مركب في Firestore.");
             }
         }
 
@@ -1318,20 +1514,26 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                             <button data-user-id="${docId}" data-role-action="suspend" class="text-xs bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded">إيقاف</button>
                             <button data-user-id="${docId}" data-role-action="remove" class="text-xs bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded">حذف نهائي</button>
                         `;
-                    } else if (userRole === 'admin') {
-                        actionsHTML = `
-                            <button data-user-id="${docId}" data-role-action="demote" class="text-xs bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded">إلغاء المدير</button>
-                            <button data-user-id="${docId}" data-role-action="suspend" class="text-xs bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded">إيقاف</button>
-                            <button data-user-id="${docId}" data-role-action="remove" class="text-xs bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded">حذف نهائي</button>
-                        `;
-                    } else if (userRole === 'suspended') {
-                        actionsHTML = `
+} else if (userRole === 'admin') {
+                        
+                        // (تعديل) التحقق إذا كان هذا المدير هو المدير الافتراضي
+                        if (user.email === DEFAULT_ADMIN_EMAIL) {
+                            actionsHTML = '<span class="text-xs text-gray-400 font-bold">(المدير الأساسي)</span>';
+                        } else {
+                            // إذا كان مديراً عادياً، أظهر الأزرار
+                            actionsHTML = `
+                                <button data-user-id="${docId}" data-role-action="demote" class="text-xs bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded">إلغاء المدير</button>
+                                <button data-user-id="${docId}" data-role-action="suspend" class="text-xs bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-2 rounded">إيقاف</button>
+                                <button data-user-id="${docId}" data-role-action="remove" class="text-xs bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded">حذف نهائي</button>
+                            `;
+                        }
+
+                    } else if (userRole === 'suspended') {                        actionsHTML = `
                             <button data-user-id="${docId}" data-role-action="reactivate" class="text-xs bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-2 rounded">إعادة التفعيل</button>
                             <button data-user-id="${docId}" data-role-action="remove" class="text-xs bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded">حذف نهائي</button>
                         `;
                     }
-
-                    const li = document.createElement('li');
+const li = document.createElement('li');
                     li.className = 'py-3 sm:py-4 border-b last:border-b-0';
                     li.innerHTML = `
                         <div class="grid grid-cols-12 items-center gap-3">
@@ -1372,7 +1574,13 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                 }
                 const userData = userSnap.data();
                 const userNameForEditors = userData.name || ''; 
-
+// --- (جديد) إضافة حماية للمدير الأساسي ---
+                // تحقق مما إذا كان البريد الإلكتروني للمستخدم المستهدف هو المدير الافتراضي
+                if (userData.email === DEFAULT_ADMIN_EMAIL && (action === 'demote' || action === 'suspend' || action === 'remove')) {
+                    showAlert("❌ لا يمكن تعديل صلاحيات أو حذف المدير الأساسي للمنصة.");
+                    return; // إيقاف التنفيذ فوراً
+                }
+                // --- نهاية الإضافة ---
                 if (action === 'promote') {
                     await updateDoc(userRef, { role: 'admin' });
                     showAlert("✅ تمت ترقية المستخدم إلى مدير بنجاح.");
@@ -1554,10 +1762,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                 showAlert("حدث خطأ أثناء إرسال طلب التحكم.");
             }
         }
-
-
-
-        /**
+/**
          * =============================================
          * منطق Firebase (CRUD للأقسام والعناصر)
          * =============================================
@@ -1901,8 +2106,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
                 showAlert("❌ فشل إضافة العنصر. (يرجى التحقق من قواعد أمان Firestore).");
             }
         }
-
-        /**
+/**
          * (Update) معالجة تعديل العنصر
          */
         async function handleEditItemFormSubmit(e) {
@@ -2106,7 +2310,7 @@ const closeBtn = document.getElementById('close-admin-manage-modal');
             itemDiv.className = "group item-card bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative item-wrapper flex items-center";
             itemDiv.dataset.itemId = item.id;
             itemDiv.dataset.sectionId = sectionId;
-let href = item.url || '#';
+            let href = item.url || '#';
             let target = (item.type === 'link' && item.url) ? 'target="_blank" rel="noopener noreferrer"' : '';
             let download = (item.type === 'file') ? `download="${item.title || 'file'}"` : '';
             
@@ -2292,7 +2496,8 @@ let href = item.url || '#';
         }
         
         /**
-         * (جديد) طباعة العناصر المحددة
+         * (جديد ومُعدل) طباعة العناصر المحددة
+         * يجمع كل العناصر في صفحة واحدة أو أكثر بعنوان "تقرير مخصص"
          */
         async function printSelectedItems() {
             if (selectionBasket.length === 0) {
@@ -2311,30 +2516,23 @@ let href = item.url || '#';
             });
 
             try {
-                // (جديد) تجميع العناصر حسب القسم
-                const itemsBySection = selectionBasket.reduce((acc, item) => {
-                    const section = item.sectionTitle;
-                    if (!acc[section]) {
-                        acc[section] = [];
-                    }
-                    acc[section].push(item);
-                    return acc;
-                }, {});
-
                  let isFirstPage = true;
 
-                 // (جديد) المرور على الأقسام المجمعة
-                 for (const sectionTitle in itemsBySection) {
-                      const items = itemsBySection[sectionTitle];
-                      
-                      // تقسيم عناصر هذا القسم إلى صفحات
-                      const itemChunks = chunkArray(items, 5); // 5 عناصر في كل صفحة
+                 // (تعديل) تجميع كل العناصر المختارة في صفحة واحدة (أو أكثر)
+                 // بدلاً من تجميعها حسب القسم
+                 const itemChunks = chunkArray(selectionBasket, 5); // 5 عناصر في كل صفحة
 
-                      for (const chunk of itemChunks) {
-                           // إنشاء صفحة PDF باستخدام العناصر المحددة وعنوان قسمها
-                           await createPdfPageFromHTML(doc, sectionTitle, chunk, isFirstPage, "تقرير مخصص");
-                           isFirstPage = false;
-                      }
+                 for (const chunk of itemChunks) {
+                      // (تعديل) استخدام عنوان ثابت "تقرير مخصص" وأيقونة افتراضية
+                      await createPdfPageFromHTML(
+                          doc, 
+                          "العناصر المحددة",  // عنوان القسم في الصفحة
+                          '📋',               // أيقونة افتراضية
+                          chunk,              // العناصر لهذه الصفحة
+                          isFirstPage, 
+                          "تقرير مخصص"       // عنوان الترويسة
+                      );
+                      isFirstPage = false;
                  }
 
                  if (!isFirstPage) { 
@@ -2379,7 +2577,7 @@ let href = item.url || '#';
             const printSectionsBtn = document.getElementById('print-sections-btn');
             if (printSectionsBtn) {
                 printSectionsBtn.addEventListener('click', async () => {
-                    await generatePdfForSections(null);
+                    await generatePdfForSections(null); // هذه هي "طباعة الكل" العادية
                 });
             }
             
@@ -2447,7 +2645,7 @@ let href = item.url || '#';
                      if (printSectionBtn) {
                          const sectionEl = printSectionBtn.closest('.column-wrapper');
                          if (sectionEl) {
-                            await generatePdfForSections(sectionEl);
+                            await generatePdfForSections(sectionEl); // هذه طباعة قسم واحد
                          }
                          return;
                      }
@@ -2629,7 +2827,7 @@ let href = item.url || '#';
 
         /**
          * (معدلة) دالة مساعدة لإنشاء صفحة PDF واحدة من كود HTML
-         * (جديد) إضافة متغير "reportTitle" و "sectionIcon"
+         * (تعديل) إضافة نص "اضغط لفتح الرابط" تحت الباركود
          */
         async function createPdfPageFromHTML(doc, sectionTitle, sectionIcon, itemChunk, isFirstPage, reportTitle = "تقرير منصة الراشدون") {
             const printContainer = document.createElement('div');
@@ -2676,15 +2874,42 @@ let href = item.url || '#';
 
                       const textDiv = document.createElement('div');
                       textDiv.className = 'print-item-text';
-                      textDiv.innerHTML = `<div class="print-item-title">${item.title || 'عنصر بدون عنوان'}</div>`; 
+                      
+                      // (تعديل للطباعة المخصصة) إظهار اسم القسم الأصلي
+                      let titleHtml = `<div class="print-item-title">${item.title || 'عنصر بدون عنوان'}</div>`;
+                      if (reportTitle === "تقرير مخصص" && item.sectionTitle) {
+                           titleHtml += `<div style="font-size: 14px; color: #555;">(من قسم: ${item.sectionTitle})</div>`;
+                      }
+                      textDiv.innerHTML = titleHtml;
 
+                      // (تعديل) إضافة حاوية للباركود والنص
+                      const qrContainer = document.createElement('div');
+                      qrContainer.style.textAlign = 'center'; // لمحاذاة النص والباركود
+                      qrContainer.style.marginLeft = '15px';
+                      qrContainer.style.flexShrink = '0';
+                      
                       const qrDiv = document.createElement('div');
                       qrDiv.className = 'print-item-qr';
+                      qrDiv.style.marginLeft = '0'; // إزالة الهامش من الباركود نفسه
+                      
                       const url = (item.type === 'link' && item.url) ? item.url : '';
                       qrDiv.dataset.url = url;
+                      
+                      qrContainer.appendChild(qrDiv);
+
+                      // (جديد) إضافة نص "اضغط لفتح الرابط"
+                      if (url) {
+                          const qrLinkText = document.createElement('div');
+                          qrLinkText.textContent = 'اضغط لفتح الرابط';
+                          qrLinkText.style.fontSize = '10px';
+                          qrLinkText.style.color = '#008080'; // لون Teal
+                          qrLinkText.style.fontWeight = 'bold';
+                          qrLinkText.style.marginTop = '4px';
+                          qrContainer.appendChild(qrLinkText);
+                      }
 
                       itemDiv.appendChild(textDiv);
-                      itemDiv.appendChild(qrDiv);
+                      itemDiv.appendChild(qrContainer); // إضافة الحاوية بدلاً من الباركود مباشرة
                       listDiv.appendChild(itemDiv);
                       
                       if (url) {
@@ -2753,29 +2978,39 @@ let href = item.url || '#';
                  const scaleFactorY = pdfHeight / pageRect.height;
 
                  const x_on_page = rect.left - pageRect.left;
-                 const finalX = (pageRect.width - x_on_page - rect.width) * scaleFactorX;
+                 
+                 // (تعديل) تعديل حساب الإحداثيات لـ RTL
+                 // الحساب الجديد: (عرض الصفحة بالبكسل - الإحداثي الأيسر - عرض العنصر) * معامل القياس
+                 const finalX = (pageRect.width - (x_on_page + rect.width)) * scaleFactorX;
+                 const finalY = (rect.top - pageRect.top) * scaleFactorY;
+                 
+                 // (تعديل) توسيع منطقة الضغط لتشمل النص أسفله
+                 const boundWidth = rect.width * scaleFactorX;
+                 const boundHeight = (rect.height + 20) * scaleFactorY; // 20px إضافية للنص
 
                  elementsBounds.push({
                      url: qr.url,
                      x: finalX,
-                     y: rect.top * scaleFactorY,
-                     width: rect.width * scaleFactorX,
-                     height: rect.height * scaleFactorY
+                     y: finalY,
+                     width: boundWidth,
+                     height: boundHeight
                  });
             });
 
             doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
 
+            // (جديد) إضافة الروابط القابلة للضغط فوق الباركود والنص
             elementsBounds.forEach(bound => {
-                doc.link(bound.x, bound.y, bound.width, bound.height, { url: bound.url });
+                if(bound.url) {
+                    doc.link(bound.x, bound.y, bound.width, bound.height, { url: bound.url });
+                }
             });
 
             document.body.removeChild(printContainer);
         }
-
-
-        /**
+/**
          * الدالة الرئيسية لإنشاء وتنزيل الـ PDF (طباعة الكل أو قسم محدد)
+         * (هذه الدالة تبقى كما هي للطباعة العادية)
          */
         async function generatePdfForSections(specificSectionElement) {
 
@@ -3382,6 +3617,13 @@ let href = item.url || '#';
         <nav class="bg-white shadow-md p-3 sticky top-0 z-40">
             <div class="container mx-auto flex justify-center items-center gap-2 md:gap-4 flex-wrap">
                 <div class="relative hidden flex-shrink-0"> 
+                    <button id="admin-settings-btn" class="flex items-center gap-1 bg-gray-700 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-gray-800 transition duration-300">
+                        <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-1.003 1.11-1.226.554-.223 1.19-.02 1.61.428.39.39.582.936.582 1.48v.081c.01.04.02.079.03.118.22.879.683 1.657 1.3 2.27.618.614 1.39 1.062 2.27 1.3.039.01.078.02.118.03h.082c.543 0 1.09.192 1.48.582.449.42.65.956.428 1.61-.223.554-.684 1.018-1.226 1.11a47.803 47.803 0 01-1.02.078c-.468 0-.93.04-1.38.118-.614.108-1.17.318-1.67.614-.5.3-.95.666-1.35 1.087-.4.42-.76.9-1.087 1.35-.296.5-.506 1.056-.614 1.67-.078.45-.118.912-.118 1.38 0 .36.026.712.078 1.02.09.542.56 1.003 1.11 1.226.554.223 1.19-.02 1.61-.428.39.39.582.936.582 1.48v-.081c-.01-.04-.02-.079-.03-.118a6.74 6.74 0 00-1.3-2.27 6.703 6.703 0 00-2.27-1.3c-.039-.01-.078-.02-.118-.03h-.082c-.543 0-1.09-.192-1.48-.582-.449-.42-.65-.956-.428-1.61.223-.554.684-1.018-1.226-1.11a47.803 47.803 0 01-1.02-.078c-.468 0-.93-.04-1.38-.118-.614-.108-1.17-.318-1.67.614-.5-.3-.95-.666-1.35 1.087-.4-.42-.76-.9-1.087-1.35-.296-.5-.506-1.056-.614-1.67-.078-.45-.118.912-.118-1.38 0-.36.026.712.078-1.02.09-.542.56 1.003 1.11-1.226.554-.223 1.19-.02 1.61.428.39.39.582.936.582 1.48v.081c.01.04.02.079.03.118.22.879.683 1.657 1.3 2.27.618.614 1.39 1.062 2.27 1.3.039.01.078.02.118.03h.082c.543 0 1.09.192 1.48.582.449.42.65.956.428 1.61-.223-.554-.684-1.018-1.226-1.11a47.803 47.803 0 01-1.02-.078c-.468 0-.93-.04-1.38-.118z" /></svg>
+                        إعدادات
+                    </button>
+                </div>
+                
+                <div class="relative hidden flex-shrink-0"> 
                     <button id="admin-manage-btn" class="flex items-center gap-1 bg-blue-600 text-white px-3 py-1 text-sm sm:text-base rounded-lg shadow-md hover:bg-blue-700 transition duration-300">
                         <svg class="w-5 h-5 sm:w-6 sm:h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM12 15a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
                         إدارة 
@@ -3761,6 +4003,45 @@ let href = item.url || '#';
                      <li>جاري تحميل الطلبات...</li>
                  </ul>
              </div>
+         </div>
+     </div>
+
+    <div id="admin-settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4">
+         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+             <div class="flex justify-between items-center border-b pb-3 mb-4">
+                 <h3 class="text-2xl font-bold text-gray-800">الإعدادات العامة للمنصة</h3>
+                 <button id="close-admin-settings-modal" class="text-gray-400 hover:text-gray-600 text-3xl">&times;</button>
+             </div>
+             
+             <div class="space-y-6">
+                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border">
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-900">تفعيل الدردشة</h4>
+                        <p class="text-sm text-gray-600">السماح لجميع المستخدمين باستخدام الدردشة الجماعية والخاصة.</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="setting-toggle-chat" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+                
+                <div class="p-4 bg-yellow-50 rounded-lg border border-yellow-300">
+                    <h4 class="text-lg font-semibold text-yellow-900">إلغاء صلاحيات المحررين</h4>
+                    <p class="text-sm text-yellow-700 mt-1 mb-3">سيقوم هذا الإجراء بإزالة صلاحيات التحرير من (جميع) المستخدمين (ما عدا المدراء) عن (جميع) الأقسام.</p>
+                    <button id="setting-revoke-editors" class="w-full bg-yellow-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-yellow-600 transition-colors">
+                        إلغاء جميع صلاحيات التحرير الآن
+                    </button>
+                </div>
+                
+                <div class="p-4 bg-red-50 rounded-lg border border-red-300">
+                    <h4 class="text-lg font-semibold text-red-900">إلغاء صلاحيات المدراء</h4>
+                    <p class="text-sm text-red-700 mt-1 mb-3">سيقوم هذا الإجراء بإلغاء صلاحيات (جميع المدراء الآخرين) وتحويلهم إلى "مشاهدين". (صلاحياتك ستبقى).</p>
+                    <button id="setting-revoke-admins" class="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-colors">
+                        إلغاء صلاحيات المدراء الآخرين الآن
+                    </button>
+                </div>
+             </div>
+             
          </div>
      </div>
 
