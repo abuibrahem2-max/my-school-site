@@ -43,12 +43,16 @@
         
         /* Print Styles */
         .print-container { position: absolute; left: -9999px; top: -9999px; width: 210mm; height: 297mm; padding: 15mm; background-color: white; color: black; font-family: 'Cairo', sans-serif; display: flex; flex-direction: column; box-sizing: border-box; }
-        .print-super-header { background-color: #008080; color: white; padding: 15px; text-align: center; border-radius: 8px; margin-bottom: 10px; line-height: 1.6; font-size: 16px; }
-        .print-header { background-color: #008080; color: white; padding: 20px; text-align: center; border-radius: 8px; margin-bottom: 20px; }
-        .print-header h1 { font-size: 28px; font-weight: bold; margin: 0; }
+        .print-super-header { background:#fff; color:#111; padding:8px 4px 10px; border-bottom:3px solid #008080; margin-bottom:10px; display:grid; grid-template-columns:105px 1fr 105px; align-items:center; gap:10px; direction:rtl; }
+        .print-super-header img { display:block; max-width:100%; max-height:72px; object-fit:contain; margin:auto; }
+        .print-school-details { text-align:center; line-height:1.55; font-size:13px; font-weight:600; }
+        .print-school-details strong { display:block; color:#007f78; font-size:16px; }
+        .print-header { background-color:#008080; color:white; padding:12px; text-align:center; border-radius:8px; margin-bottom:14px; }
+        .print-header h1 { font-size:23px; font-weight:bold; margin:0; }
+        .print-header p { font-size:12px; margin:4px 0 0; }
         .print-content-wrapper { flex-grow: 1; }
         .print-section { margin-bottom: 25px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
-        .print-section-title { font-size: 22px; font-weight: bold; padding: 15px; background-color: #f4f4f4; border-bottom: 1px solid #ddd; }
+        .print-section-title { font-size: 22px; font-weight: bold; padding: 15px; background-color: #e5f7f3; color:#075f59; border-bottom: 1px solid #b8ddd7; }
         .print-item-list { padding: 15px; }
         .print-item { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid #eee; }
         .print-item:last-child { border-bottom: none; }
@@ -80,8 +84,9 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, collection, addDoc, onSnapshot, query, updateDoc, arrayUnion, getDoc, setDoc, deleteDoc, getDocs, where, serverTimestamp, arrayRemove, orderBy, limit, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // إعدادات Firebase
         const firebaseConfig = {
@@ -94,18 +99,27 @@
         };
         
         const DEFAULT_ADMIN_EMAIL = "abuibrahem2@gmail.com"; 
+        const MINISTRY_LOGO_DATA = "data:image/jpeg;base64,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";
+        const VISION_LOGO_DATA = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQIAJQAlAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAClAMsDASIAAhEBAxEB/8QAHAAAAQUBAQEAAAAAAAAAAAAABgADBAUHAgEI/8QAUBAAAQMDAwEEBQUKCgkEAwAAAQIDBAAFEQYSITETQVFhBxQicYEVMpGhsRYjM0JTkpOywdEkNjdSVWJyc3TwFzVDVHWClLPxCCUm0mXE4f/EABkBAQADAQEAAAAAAAAAAAAAAAABAgQDBf/EACsRAAICAgEDAwMDBQAAAAAAAAABAhEDIQQSMUFRYYETInGRofAyQsHR8f/aAAwDAQACEQMRAD8A+y6VDevHZUGNDu8Z11KIchJfQlRCVtk4OR39300RNrS42lxBCkqAII7waA6pUNaikPydT2mzxn3GgCZUktqIyhPQHHcTXSJD/wDpDcjl5zsfk4K7Pcdu7f1x40AR0qEJqJ2o9RTbc3PehW+BtS52Bwt1ahnr4U5G0/eLTPYctd4ekRS4A+xLVuAT3kHx+igCulQ7qN99rVGn2m3nENuuuhxKVEBeE8ZHfTmrbxIgIjwLa2HblNVsYSeiR3qPuoC+pUIJ0ZIeR207UNyXMPJW2vCUnyHh9FO6fuNytt6+569vCQXElcOV0LgHVJ8/888UAVUqCtaXG42/U8WRCccU2xFLzscKO1xAXhXHiAc0XwJTE2G1LjLC2nUhST5GgHqVDsF99XpAnxy84WUwW1JbKjtB3dceNXsuQ1FiuyX1hDTSCtZ8AKAUxbzcR5yO2HXkoJbQTjcrHAqvhy7s5JgoftyW2nY5XJWF57JzuT51Qw2L9qhBnuXF6029Z/g7LH4Raf5yj517b4Mi0aygw1XafMQ9HdWoPuZTxgDigDKlSpUAqVKlQCpVQa+fej6fLjDzjS/WGhuQog4KxnpXeq7tKhCNBtjaXLjNWUMhXzUAdVH3UBC1THujt9iOsQZUyGy3u2MygyA5u6nx4HSikdKANR2e7W20OXOTqSe++koBQg7EZKgPHpzRxLUUwHlAkENKIPwoB+lVLoV51/SVvefdW64pslS1qyT7R6k1dUBFu0NFwtkmE5ja82Ue7I4NVOgJi5GnW2HyfWIa1RnQeuUnA+rFEFAl7lL09e70GgdtxiduwB+WHsn7c0BZ6Q/9wvd3vquULd9Wjn+ojqfia9R/KY5/wwfr1baZt4tdiiQse022N/mo8n6yaqW/5THP+GD9egGbtAvdpvsi82NlExmUB6zGUcHI4yKkWfV8WVOTb58SRbZijhKHxwo+AP76sYF/tsy4ybel3s5MdwoU26NpVjvTnqKp/SYYq7Oyx7Kpy5CBFA+fu3ckd+MfsoB7VH8bdN/3rv6tcMAP+k18uc+rW9PZeW5XJ+s17qXI1Vprdye0dz79opnVSl2XUcLUYQpUUo9Wl7RkpSTwr/PhQBdQt6QAG1WaYj8M1cGwk9+FdR9VEcaXGkxhJYfbcZIyFpUCMUKy5KNR6thxIRDsG2L7eQ8nlKnPxUg9/wD5oESbilK/SLAQtIUk290EEcEbqj2JStN6iXYXifk+YS7AWfxVd7f+f21Infyk27/h7n61WOqrOm8WlbAVskNntI7nehY6c0BX2/8AlJuX+Aa/Wrr0krUnSrraSQHXW21HyKuaqtDznrhqyW/KQUSkwUNSEEYw4heD9PWibVNtN2sEqCggOLRlsnuUDkfWKAsGG0MsIZbACEJCUgdwAxQ9cf5Q7V/g3vtFOaS1BHuEFMeS4li4MDs32XDtVuHGRnrUe6vNN6/tDi3EBC4zyASoY3ccUAUUqb7dn8qj84Uu3Z/Kt/nCgHKVN9uz+VR+cKXbM/lUfnCgKD0i/wAWz/iWf1xTOo3kQNZ2a4SSERlNuRy4eiFHkZ8K79IbratO4S4kn1lngH+uKu7vEgzYDke4obXHVjdvOAD3HPcaElP6RiDpJ8jkdo1+uKu5v+rn/wC5V9hoC1ZpyFarX/B7jNcU6622xGce3JJKh0HfgUd3NaGrXJW4oJSllWST5GhBV+j3+Jlt/uj+savqo9AJKdG20KGD2WfpJq8oBVAutng3N+K9LaK1xXO0bwcc+B8RwOKn0qAVQxbYou5ugSr1ks9iTuONuc9KmUqAqr3p203ghc2MC6OA6g7Vj4j9tR7PpSz2uUJbLLjr6fmuPOFZT7vCr2lQEOZbYsqdEmPJUXohUpohRABIwcjvqS8028ytl5tLjaxhSVDII86Uh5mOyt991DTSBlS1qASkeJJrmNJjyWu1jPtPN5xubWFD6RUWroWDjuhLAt1S0tyGkqOS228Qg/Crq1R7ZbgbZASwyW0hamkq9rByAo9/OOp8Kr9faus2idMyL/fXlNxWSEpSgbnHVnohCe9R8PInuoGskNS9Vn0gMX71uwymRJYktKBVISvhLG3y8PIdDnHHkTy4+hwg5Jum/T3KSm00krNMctsVy7NXRSVestNFpJ3HG0nJ4qXTMKSzLityY6wtpxOUqFVeoNV6esMpiLd7qxFkSMdk0rJWvJ2g4AzjPGa0whKbqKtkznGCuTpE1i1wmLs/dGmtkl9AQ4oHhQHl4+dTaVKqliovOmrNdne2mQ0l78oglKj7yOvxqCnQ2ngytr1VwhZB3F1RKceB7utEtKgBX7gdP/k5P6c0vuB09+Tk/pzRVSoAV+4DT/8AMlfpzS+4HT/5OT+nNFVKgM9j2bSKm48hti5AOzPVUZUchwHqfLjrRxdYEa5wHIUxBWy5jcAojocjkVKwPAUqAH7To+y26aiY028662ctl5wqCD4gVL1BYIN77ATi8UsklKUObQc4zn6KtaVAcMNNsMIZZQENtpCUpHQAdBXdKlQCoP1lrRu1Oqg29KH5ieFqV8xo+HmfKrfWlxlWzT0iVDaUt3hIUBns8/jn3ViiipSipRKlE5JJ5JoSi3lanv8AJWVOXWSnPc2rYB8BTkDVmoIbgUm4uvAdUPe2D9PNdWXSV6usYSWGENMq+at5W3d7h1x51BvdnuFnkhiezsKhlCgcpUPI0BqejdUR780ppaAxMbGVtZyFD+cny+yiKsHsk9y2XWPOaJBaWCfNPePiM1uza0uNpWk5SoAg+VCCq1nbXLvpefbWn2o6pDWwOOfNTyM5oGGldV2bQCbZp6Y0bgqep9TsZ4ICm9pGMq68gcUfaiTElWqZAfmtRt7BUtSiMoQDyognp50IxplhhR9LRk3J6QH33PVXGWvYcO8Z3AnKR3VkyQ6M6z4odeRLSutXt/C3+xk5eLDODWSfTerTp7fj50RtVsJ1M7I0Nq6wOPWT5MRIeuRKklLyQM7FYwFgnqDnrVio2e1WDZIVEiaTbjtMRG0JwWz0AAHO4ck/T40tBOG6Wdy8Wi7C8W25zVLzIbWjs2gpSVpSlR67uPDirqZpyLNecYlrS/bDHQ2i3qQNiFpUSFgjnPd9NTmWbPmxOacIR24p76u1vdU149aLxWSGGXRuT7X2Xp2Af0h2zVerNGXzTOmUmyKjux/k+YiUplDzW4FWVo5IKcnjxweaqr3oCK9pvSKdV6wixJdsgphOvtffPWVpIwUqUcnHfkE80fTrbLNwss24XAx+yWphcZhKi26VbgkYBAHsnqRVPMtGmdSWdmI67cY7FumqSPmhalFPPPOB+6tXF5ebjZscFL7X1Nv+5Pwqqnr9DLysc82CcXG5apN6fZ+O1GiIBCACSogdT30Kekq7XC1W+I5b5BZW48UqISDkbSe+r+Hcrc9NftrE1pyXFwHmd/tpyAQSPcRzVJ6RLLPvUGK1AQ2pTbpUrcvbxtIqWmu56EJRkrTsAfuy1J/Sav0SP3Uvuy1J/Sav0SP3VJ+4PUX5GP8ApxS+4a8tAuTFRY0dHLrqnchCR1OO+oLkf7stSf0kr9Ej91WelNU32ZqKDFkzy4y67tWns0jIwfAULXFcUvlEFChHRwhS/nuf1leGfDuq89HFskzdRMSm04YiK3urPTocD3mgNfFV9+vMGywzJmuYzwhCeVLPgBUi4y2YEB6ZIVtaZQVKNYlqC7SbzcnJslR54bRnhtPcBQhF5eteXiYtSYakwWe4IAUsjzUf2VRqvd4Uveq6zSrx7dX76jQokmbITHiMOPuq6IQMmiBvQmolNbywwk/zVPDP7qEjVr1nf4SxulmU33ofG7Px6itE0pqmDfUdmn7xLSMqZUeo8UnvFZLdLZPtb/Yz4rjCj83cOFe4jg0xFfejSG5EdxTbragpC0nkGgPoClVPo+9IvlnRJ4S+g7H0DuUPDyPWrihB4pKVJKVAKSRggjg0FuaBhnUSJaFJFuzvXHPXd3JH9U//AMo1pUB4lISkJSAABgADpQn6VmW16X7VQG9t9BQe/nIP1UW1mnpUvjcl9FnjL3JYVvfIPG/uT8O+gQCn5p91HGvtXX3TkDT7FuiIU3JZbUt0jcpwpxloDuJHf154oPtsRydcGIbQyt5wIHxPJ+itxlQwYQTHbZMhhB9VW6jcG17SAf8AxV8c4wl1SV+xm5uHJmwuGKfS/Uy62+j6VF9N87X8vUD4t92hCOi2PBS3FdogBTS88IbSoAgDvOOO8vskKQGbazBscGJFiS1hwPoJWlGD7Tajzu3dT31QW2ZehY3I1+XFc1OQ7JtkOQ+EuvoBG4dmCMgK6D3dKNNJplLhmXcHCLg6hsS2A6FpZcSnkAD5uepHnWSaly/pcnqcaTVUk32r31XyRjmpSeOUfF3X8V+3oN6xku2vTEhduaaS4cIQnaQAVHHASRzz4jHUnANfOto1VqJd+YjpuD7jZeSlLCnVlGAolIzuBIBUSMqxyM8V9PXOE1PhOxXgChxJB46ZGPsNZ5B0bDGr34gaaDjDMeQpzaMnc7J3H4gpHwHhWqLNDRoFlkOTLTGkvpQHFthStoIGfceR7jyOlDF6mXe1XCzQRYmbkzNnLEh5tva3HR+Ko4HBwSeRg465NF8ZpLDKWkDASP8AyapdRtlqUJsBwKuymFNR2VO4StO4FRCTwSP21EX0yUum/wCf4KZYtrTr/oHXzTryLRqnUuikvzL9PiOsxWX3AnY6o+0pCj5EEAnuAzUT/wBLadbjQkpOtZE9S2Zao8Nmcgh9ptsBKtyj7SgVZxnPA64NX+o7NOvsu1i13JiE7b3wuYyzlspUrG9SSOvGRjzPNHY4FZ+Fzs2bE4Zak1X3Ls6713qnplcWCGGTWOPSu/5vYqy70jam+UH1WqC5/BGlffVpP4VQ7v7I+s0T+k25TLfYUoiex6y52S3AeUjBPHv6VkldzQiwsFplXm5IhRU8nlayOEJ71Gtoslsi2m3NwoicIQOSeqj3qPmazPROqotiaVHet25LisuPtq9s+GQeoHhmtQtk+JcoaJcJ5LrK+hHcfAjuPlQAZ6XbipuLFtiFY7Ul1zzCeAPp+ys4bQpxxLaElS1EJSB3k9BRP6UXS5qxxBPDTKEj6Cf21F9H0ZMnV0FCxlKFFz80Ej68UBpmkLCxY7YloJSqUsAvud6leHuFXVKlQgh3i2xLrAchzGwttY4Pek9xHgaxK829613SRAf5WyrGcfOHcfiK3msy9L0ZLd2hykjBeZKVeZSePqNCURPRZcVRdReqKVhqWgpx/WHIP2j41rFYTp14x79AeH4slH6wFbsKAVKlQdr3VqbYhdutywqaoYWschkf/b7KEHOvtWptyF223OAzVDDjg6Mj/wC32VlxJJKlEknkknrXqlKWoqUoqUo5JJySa0LQOjtpbut3a54UxHUOngpQ+wfTQkk+jTTS4TfyvObKZDicMIUOUJPefM/ZRpJeRHjuPuZ2NpK1YGTgDJ4pygH0x6gv1hhW96ytupHbFb7wa3oAAwEK/tE+XSumLG8k1FGXmcqPFwyzT7L0B/Sa7X6Qroj0gfIbsa/2UOQ4alSNzLm4KI9k/jJCie7k9T3Gumrpa5V0u9kgussX6Mll+6IQyohtTqcpJJ4JIHTPFJlUJ/1K3zkNQ7i+hL77bDWG1OqAKvMK46mrGOJMZxL7TLUkyXkIecC0+ykbsqz1IBOAk9KzTy8fk8qWXFK1H7elO1Fp3+b3+hPHWSONLJt97qr+PBDuELVsQmVa7zHuBTyYc2OlCVjwS42AUnzIIoPha1fd19cW4djnuXR2BHYRBcTsLbqFuFe9fQIAWDv5BBGM0Z6v1DLs640W32SddJkwLSwGk/ekrGMdor8Uc5z4A1R/cfdoDCdQwp/rOrAouyXFqIZlpOMx8fioAACT3EA95ruvc7l7bbfqdeH7nqBpDiuTHiREBpPluXlSvfkVU+lKRqFqwPtaPaivapbY7SKt5nKQkqCVlJJ2hWDkBRxxV7pK/Kv0J59dpuFsWy72S2pje1RUACSPEZOM+VMXeTJZVCkyLhEhR/WNjgWsAOgnCUjxJ6Y+Ncc2d8eH1FHqprSry69tLu/YhqL0wbvtz1Na2LK7abTHdmznWxdBHSVjtQkKUlJIACTlXt1oaTuGenl4UAStQuXG8X3R9l9Zt90aiL9XmOYJLqRxgcgJwRg/GmPQTbtT2jTE37qEqZQ6+ZDKZDm55OR7ZXnoCRnk561uXEhj49xSjXj1vd/z5PN4/J6+TLpk5J69ouOmvn/VBbrS0O3qxLhsKbS8FpWgrOBkH9xNAL3o+vyEFSFRHSPxUukE/SK0y0XOFdYnrMF4Ot7iknoQR5fXUysp6hgM2JJhSVxpbK2XkfOQoc0R+jO6uQdQIhqUfV5nsKT3Bf4p/Z8au/TEwyGrfJwA8VLRnvKcZ+o/bQRYCoX2AU/OElvH5woSXHpNQU6vkKPRbbah+bj9lN+jh5LOsIm84CwtHxKTirz0vwSJMO4pHsqSWVnzByP20DQ5DkWW1JZOHGlhaD5g5oD6ApVCsVzj3a2NTo6gUrHtJzyhXek+YqbQgVZv6YnkmZb2B85La1n4kAfYa0Z5xtlpbrq0oQgFSlKOAAO+sS1bdflm+vzE57LhDIP8wdPp5PxoSiLY2y7eoLSeqpDYH5wreRWP+jWCZmqWHCMtxgXlHz6D6z9VbBQMGfSHfpFltbaYicPyVFCXD/swBycePhWRKUtxwqUVLWo5JPJJP2mtH9MDbjkW3dm2teHF52pJxwKzsR5I5DD36M0CL2zO2uwuolz2fX54OURkKGxnzWroVeQzj30Rf6S0/wBDq/6gfuoA9Wkf7u9+jP7qXq8j/d3v0Z/dQB//AKS0/wBDq/6gfuo1tEtN0tEeYpkITIbCygndjPd51hfq7/5B79Gf3VtWjQU6WtqVAgiOnIIx3UIaHpcC3olKuzrex5ptW5xOc7ccnA6kCge32TT+qY9ruVquk9DNnuan0nZguqwlWDnuwBzjPWtDmKQiI8t1KlNpQoqAGSRg5ArKtGaz00nS2oHtJ2OQ2i2pbfU3KXgv7sp3cFRGAKpx+LyMeR5OLFKO3J15ek/nyZOXnxRqOZ6put3revwXegNXfK9+1Tp6DZ5cJVinhpT8twrTJ3KVuUk44HA4yeo91EbV/eXq12ymzTUw0QUSk3MgdgtallPZDv3ADP8AnmNp2/Cdoxm/3ZtEJBaUt9OClKNqiDgHk5wMU/8AK0IwRdEyAbZ2JfVI427ccnP87PG2ryaU3igkmvH7WdMeeEscZp6av4JbzS5KI6Z+wONPJcBaWUjIJx7xjrWa+mG56U9H+iosrUMC4XWI7dkqS2ytCXAsoUokHIynCSCMjOaN595dkaMkXvTuJqlM74yUoKyTuAwUdcgZyKDNZaghvaMsitX6St12XNLrjkSSztDRT7IUErBwSDVc0sWDE8vJ/oTpo4z5WKUvp97V33VXRpVmEKSw3eI8NLLs5htxalIAcKSkFKVEeAOOtBHpRv8AI7dVjYStpoJCnlkY7TPIA/q+PiaPrYpC7dGWhkMpU0ghsfiDA4+HSqzVunIt+hhKz2UlsfengOnkfEVa+rZsikloyfT97n2SWX4TgwrhxtXKFjzH7aNmfSTG7L79a3g5johwFJPvNBd6sN0tDpTMirCAeHUDchXx/fVXkeI+mhYt9U36TfpwkPJDTbY2tNA5CR3895NSfR9AXO1TFwnKGD2yz4BPT68VV2q2T7m+GYMZx5R6kD2R7z0Fa3ovTrVht6kqUlyU9gvOAceSR5CgJupLU3eLM/BWQlSxltR/FWOhrEZcZ6JKdiyWy280opWk9xrf6G9ZaUj31vt2lJYnIGEuY4WPBX7+6gRmWn77cLJILsJ0bVfPaXyhfvHj5ijBr0lDsvvtoUXMfiv+z9YzQXd7Lc7U6UTojjYHRYGUH3KHFV+R4j6aAINS6suV7QWF7Y8XP4Fsn2v7R7/sqgAJOACSfCpFvgTbg8GoUV2Qs/zE5A956CtH0XopNucRPuhQ7KTy20OUtnx8z9QoCw9HtiVZ7PvkJ2y5OFuA9UjuT8PtNEtKlQgVKvFqShClrUEpSMkk4AFcR5DElJVHebdSk4JQoHBwD9hB+NAOUqVKgFSpUqARAIIIyD1ob0fofTulVyHbPEW27JGHXHHVLKhkkDngAE9wokpVeOScYuKen39ykscJSUmtrsQb9aod6tL9tnI3sPJwcdUnqFDzB5oRDVqjoToY29TtsLfYuEj74pw89p9POfj3UdOONtlAWtKStW1OTjceuB9BphLMJ2eZKUtLlMjs1KHzkg84P+e+vK5/E5GWWPJxpqEk1bq7intF1DG7643aoj6bs0Gw2dm129BSy0Op+ctR6qUe8mvbxZLTeEITc7fHlhGdnaoyU564PdU155plIU86hsE4BUcZOM/sNdIUlaErQoKSoZBByCK9HIlktT3fqUhjhCChFaXgSEpQgISAEpGAB3CvaVKpLiIBBBAINRVW23KVuVAiqV4llOfsqVTXrMfsy727ewL2FW4Y3Zxj354oDtpttpAQ2hKEjoEjArqlTTUqM66ppp9pbic5SlQJGDg8e/igHaVcNOtO7uycSvYooVtOcKHUe+k6621t7RxKNyglO44yT0HvoDpSQpJSoAg9Qaim2W1StyrfEKvEspz9lS6VActNttI2NoShI7kjArqlXHat9sGe0T2hTuCM84zjOPCgO6VcMutvNhxpxLiDnCknIODg13QFXepMsyGLbA7JL8hKlLcdTuS22nAJ295JIAFN6cXJSxPZkutuuR5KmwtDQbCgEJI4Hvp67wJL7zE2A+hmXH3BPaJJQtKsZSrHPcDkdMVWR42pIZlr3WfEl7tFblucEgJwOPIUBYQHJ1x03GealpjynWkLLpaChnv9moaLtcJMGHHYQwi4SHHGlrUCW2+zJC146nuwPOu4TF8iWyFGgKtjrbTCULW4pfKh1xgdKaFrlxrdHecmxY9wYfccSs5LKu0USUHODg5HnkCgOF3K62+Fcw881NejPNNocU32aUhYTyoDuG6n0O3u3XCG1Mmx7g3Lc7MpSz2SmzgkqTgnKRjnPNVkVu93FV5bb+SHWn1hp1QWspJ7MA7Tju4+NTW4GphJiyHFWl1cZktI3Kc5JxlR46nA+uhJcCYs3xUDYnYIwe3d+SojHu4qO3c3lWe4TS23viqfSlPOD2ZOM+/FQvVNTfKap4+SN5ZDO3c5jAUTnp500mz35uHIt6JsNxiWVKeeUhQW2V/PCUjgjk4z0oQT7m4Xk2V1QAK5SFEDzbXXdo/1xeP79v8A7SaitW+9qkQWpLsBcWI6FhaAtLiwElIyOgPNWcGI4xOnvrUkpkuJWkDqAEBPP0UBU3ORc5q5/qTzEWNBykrWyHFOuBOSACcADIHj1qU/NkNWa3PoUkLecjpX7IxhZAPHd1pu4Wy5oemKtb8XspoJdakBWEr27SpJHiMZBFQZcXUCLfGjvu2ZtuOptSVFbgyW+eePKgLtyU8NQswwodiuKtwjHO4KSBz7iaq1XW5KtMUslkSJUxyN2zifYbAWsA7R1OEge+noDdxN6ROubtuSlMVaUBhSuQVJO47u7j66qYUS93CxKZiKtojLkLcZcWpe8YdKgrgY6j6KAuLe9dYt5bt06SzPQ80p0Ooa7Nbe0ge0BkEHPFQQP/jyx/8Alv8A9mn24mpUXF6cRaFOONpbAKnMJSCTgcd5Oafj2qZ8iiK+4x6wZYkKKM7Pwu8gZ56UBNvU1yFDCo7aXJDriWWUqOElajgZ8h1+FVcP5Vi3SVHcfjSnjCLzYRHDQ3lRGM5JIJ8atrxBM+F2KHiy6haXGnQM7FpOQcd/uqoEPUwuZnZtCl9gGcZcAI3ZzjFAcWmXc7ba2o6tOzl9mnc6sPNErUeVKxu5JJJqXeJDUuFapTCtzTs1haTjuJr3Oqfydm/Pd/dVc1adRot8OHutRTFdQ4lW5zKikk88edAW1xnzjPMC1R2HXm0Bx5x9ZShsHO0cAkk4Pur2Fd0qtsqTNaMZ2GVJkt53bSBnIPeCCCPfVcyq92y5SZsy3oltykoChBJUpCkggZCsZBB7umKju27UU2PcVdjb46bgQS264oraASEpB2jGeM/GgJ6LtdmCzKuNuYZgvLSnKHSpxjccJKxjHUjOOmakr/ja1/gV/wDcTVbcH7zdYHyYm0LjPqKe3eeUOxASQTtIJKs48O+p9uiXY3j165eopSmOWkCOVEnKgcncPKgO9I8WBj+25/3FVa1CscRyDbG4rqkqWlSySnpyon9tTaA4ddaaKA44hBWrajccbj4DxPFNuyoiFOIckMpLSQtYUseyD0J8KpdbuPNItbkZkPvCejs2ycBStqgOe4VU+wrQl3cXu+UVKUJ5X87tQocf2cYx5UAZoeZU6thDjZcQAVIChlIPTI86YlG3SoLhkmM9FBO8uFKkAg85zxwaFZiZMbVlxu8UrWYbccPtD/aMqB3fEY3D3VHt5jzYtoYeIXb5NykrUD81whSlNg+RPOKAL7dItSYBVAehpiNDksqTsR49OBT0SdDmbvVJbD+3r2bgVj6KFLo4lmNf4XyNHgLVAU6HGlg9qkbkpJAAxT86HChP2GTBYajzHJDbR7JISXGyn2wQOoA5oAjkXCDHkIjvzI7Tq/moW4Ao+4GnVPMpeQwp1CXVglCCoblAdcDvoYsMC2T7Zc5FzZZefckvJlLcSCpASogDJ+aAkAiqZLc6Y1p99p1ZmsQnn2Srq5sUnaD/AGk8fGgNAD7JfMcOoLyUhRRuG4A9+PCuJkyLDa7WXJZjozjc4sJGfjQvpZmUnVkiXOymTMgpfW2f9kC4QlHwAHxqYWI83W0hue2h7sIjZituJynCid6gD35AFAXi5kREUSlyWUxzgh0rG056c9K4izYE1SkRpcaSUjKg24lWB8KCrk02xBvcKE2lyI1cI3ZM59gLUUlaB4DOPdminT7LqC+p+yw7argJLC0qKxz1wB0oCVOk2wEQJr8UF5O0MurSN4Pdg9RTxVGiNNNbmmEEhttOQkZ7kgfsoWv0VUKfcbm/bod1gObFvhRHbMBKR0z1Hfjg1G1rNjTZyYpW+BGi+sMlplS8Pq/B52jjAB6+NAGpdaDwZLiA6pJUEbuSB1OKbdmw2kOLdlMIS0oJcKnAAknoD4Gh+FObn6gs04eyJFudIH9bcjKfhz9FV1zSh0XcKSlbarzGSQRkH8GCKAMo0qLJaLsaQy82Oqm1hQHxFOMutvNJdZcS42oZSpJyCPI0Myo0WBquOi3NNsGREe9abaASkpSBsUQOM54zVhowgaTtpOABHTQFol9lT6o4dQXkpClIChuAPQkeFMO3O3NSDHcnxUPA4LanUhWfdmgq23aOdSNXbc/2kySthzc0oIDJwlr2sY6pB/5qV3dYbmX8PWRM0OSEtCQvYEtKU2lIyTyBk5yKAPX3mWGVPPuIabSMqWtWAPjXMiTHjtdrIfaZbyBvWsJH0mhTUqmWLbaLFcHHXG1pSZamkKWVIbT4DnBVjnyqK7LXP0bbU9mmRIZntR1NvDaFqSogbsjjIweR30AZNTYTrC5DUuO4y389xLgKU+891OPSGGWQ8682hskALUoAHPTnzoHfacjp1C3JgsQXnrbvQzHILZQncConA9rJ8OlP6rkRX2rdaZSngz6sX3OybUshW3a3wkEj2iT/AMtAGtKqzS083KwxZSvwpRtdB6haeFfWKs6AYlxGJSmFPIKiw6HW+SMKAIz9ZqNJs9vkOSlusnMttKH8LICwnoSB3+dKlQEhmHHalyJSEffX0pS4ScghIIHHxqKbFazaVWwxU+qFZWEZPsqJzkHqOT3UqVANxNPWqPFksIYWsSUbHluOqUtSfDcTnFdWqwWu3SPWI0dXbBO0OOOKWpI8BuJx8KVKgG7hpu0TpipUiMorcx2oS4pKXcdNwBwanmDF9bYlBoB1htTbeDgJScZGOncKVKgPRDYFwM4IPbloNFWT80HOMe+o94s8C6dmqW0rtGvmONrKFpz1AI5xSpUAm7LbW7ai3txwiOhxLgSFHJUFBWSepORVhSpUBUTtOWmZMVKfjKLjhBcCXFJS5jpuSDhXxqfEhx4zsh1lBC5C97hJJyQAB7gAOlKlQEKRp61Pw0xlsKCEOqdbKXFJU2pRJJSQcjr0r02G1m0fJYjkRdwWUhZCirOdxVnJOe+lSoBy1WW221Lvqkfap0YcWpZUtQ8NxOcU8zAjM2sW5tCkxw12QTuOQnGOvWlSoDx+2w3rWLatr+DBCUBAJGAnGMHrxgVyq1wlNzW1s7kTTl8EkhXshPw4ApUqA6i26LHkCQ2lRdDCWApSyo7E5wOft76jzLFbZYkB5lX8IcQ65tcUnK0jAIweDjwpUqA4jaetLEeU03HURJb7N1S3VKUpPhuJyBU2LBjRpLshpshx1KEKUVE8JGEjypUqA9hw2Iinywgp7d0urGSQVHqfLpUilSoD/9k=";
         
-        let app, auth, db, userId;
+        let app, auth, db, storage, userId;
         let sectionsCollectionRef, usersCollectionRef, permissionRequestsCollectionRef;
         const sectionsPath = `sections`, usersPath = `users`, permissionRequestsPath = `permissionRequests`, configPath = 'config';
 
-        let currentUserName = null, currentUserEmail = null, currentUserRole = 'viewer', isUserAdmin = false, isAppInitialized = false;
+        let currentUserName = null, currentUserEmail = null, currentUserRole = 'viewer', isUserAdmin = false, isGuestMode = false, isAppInitialized = false, guestAuthAttempted = false;
         let selectionBasket = []; 
+        const DEFAULT_YEAR_CONTAINERS = [
+            { id: '1448', title: 'ملفات العام الدراسي 1448هـ', subtitle: 'العام الحالي', order: 0, isCurrent: true, isVisible: true },
+            { id: '1447', title: 'ملفات العام الدراسي 1447هـ', subtitle: 'أرشيف العام السابق', order: 1, isCurrent: false, isVisible: true }
+        ];
+        let yearContainers = DEFAULT_YEAR_CONTAINERS.map(y => ({ ...y }));
+        let currentYearId = null, latestSectionDocs = [], requestedYearId = new URLSearchParams(window.location.search).get('year'), yearsConfigReady = false;
         const adminControls = ['add-section-btn', 'admin-manage-btn', 'admin-perms-btn', 'admin-settings-btn'];
         const generalControls = ['print-sections-btn', 'logout-btn'];
         let globalConfig = { isChatEnabled: true };
 
-        let permissionRequestsUnsubscribe = null, userDocUnsubscribe = null, globalConfigUnsubscribe = null, sectionSortingInstance = null;
+        let permissionRequestsUnsubscribe = null, userDocUnsubscribe = null, globalConfigUnsubscribe = null, sectionsUnsubscribe = null, sectionSortingInstance = null;
+        let uiEventsInitialized = false, sectionSubmitBusy = false, itemSubmitBusy = false, editItemSubmitBusy = false, editItemModalOpenedAt = 0;
 
         let chatAllUsers = {}, chatAdminList = {}, chatCurrentChat = { type: 'group', id: 'group' };
         let chatUnreadCounts = {}, chatMessageListeners = {}, chatSynth, chatSoundReady = false;
@@ -127,8 +141,8 @@
         let chatWindow, chatListView, chatMessageView, closeChatBtn1, closeChatBtn2, chatBackBtn, chatUsernameDisplay, chatUsersListDiv, chatMessagesDiv, messageForm, messageInput, chatTitle, chatSubtitle;
         let loginModal, loginForm, loginError, addSectionModal, addSectionModalContent, addSectionForm, closeSectionModalBtn, cancelSectionModalBtn;
         let addItemModal, modalContent, closeModalBtn, cancelModalBtn, addItemForm, columnIdInput, itemTypeInput;
-        let editSectionModal, editSectionForm, editSectionTitleInput, editSectionIdInput;
-        let editItemModal, editItemForm, editItemTitleInput, editItemLinkInput, editItemIdInput, editItemSectionIdInput;
+        let editSectionModal, editSectionForm, editSectionTitleInput, editSectionIdInput, editSectionColorInput;
+        let editItemModal, editItemForm, editItemTitleInput, editItemLinkInput, editItemIdInput, editItemSectionIdInput, editItemTargetSectionInput;
         let alertModal, pdfSpinnerModal, adminManageModal, adminUsersList, adminPermsModal, adminPermsList, adminSettingsModal;
         let currentEditorsList, currentEditorsContainer; 
         let logoutBtn, loginAdminBtn, chatTotalBadge, deleteAllChatBtn; 
@@ -165,6 +179,7 @@
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
+            storage = getStorage(app);
             
             sectionsCollectionRef = collection(db, sectionsPath);
             usersCollectionRef = collection(db, usersPath);
@@ -246,6 +261,16 @@
                  if (globalConfigUnsubscribe) { globalConfigUnsubscribe(); globalConfigUnsubscribe = null; }
                  
                  if (user) {
+                     if (user.isAnonymous) {
+                         userId = user.uid; currentUserName = 'زائر'; currentUserEmail = null; currentUserRole = 'guest'; isUserAdmin = false; isGuestMode = true;
+                         if (initialLoadingMessage) initialLoadingMessage.classList.add('hidden');
+                         if (loginModal) loginModal.classList.add('hidden');
+                         if (!isAppInitialized) { initializeAppLogic(currentUserName); isAppInitialized = true; }
+                         else { updateUIForUser(currentUserName, false); listenForSections(); }
+                         listenToGlobalConfig();
+                         return;
+                     }
+                     isGuestMode = false; guestAuthAttempted = false;
                      userId = user.uid;
                      currentUserEmail = user.email || 'غير مسجل';
                      if (initialLoadingMessage) initialLoadingMessage.classList.add('hidden');
@@ -279,10 +304,15 @@
                      listenToGlobalConfig();
                      
                  } else {
-                      userId = ''; currentUserName = 'زائر'; currentUserEmail = null; currentUserRole = 'viewer'; isUserAdmin = false; isAppInitialized = false; 
-                      updateUIForUser(currentUserName, false);
-                      if (initialLoadingMessage) initialLoadingMessage.classList.remove('hidden');
-                      if (loginModal) loginModal.classList.remove('hidden');
+                      userId = ''; currentUserName = 'زائر'; currentUserEmail = null; currentUserRole = 'guest'; isUserAdmin = false; isGuestMode = true;
+                      if (!guestAuthAttempted) {
+                          guestAuthAttempted = true;
+                          try { await signInAnonymously(auth); return; } catch (error) { /* قراءة عامة احتياطية */ }
+                      }
+                      if (loginModal) loginModal.classList.add('hidden');
+                      if (!isAppInitialized) { initializeAppLogic(currentUserName); isAppInitialized = true; }
+                      else { updateUIForUser(currentUserName, false); listenForSections(); }
+                      listenToGlobalConfig();
                  }
              });
         }
@@ -307,12 +337,8 @@
                     const sectionsQuery = query(sectionsCollectionRef, orderBy("order"));
                     const snapshot = await getDocs(sectionsQuery);
                     
-                    if (sectionsContainer) sectionsContainer.innerHTML = '';
-                    if(snapshot.empty && sectionsContainer) sectionsContainer.innerHTML = `<p class="text-gray-500 text-center col-span-3">لا توجد أقسام حتى الآن...</p>`;
-                    
-                    snapshot.docs.forEach((doc) => { renderSection(doc); });
-                    setupItemSorting();
-                    setupSectionSorting(newIsAdmin);
+                    latestSectionDocs = snapshot.docs;
+                    renderCurrentView();
                 } else if (newName !== currentUserName) {
                     currentUserName = newName;
                     updateUIForUser(currentUserName, isUserAdmin);
@@ -326,16 +352,114 @@
             globalConfigUnsubscribe = onSnapshot(configRef, (docSnap) => {
                 if (docSnap.exists()) { globalConfig = docSnap.data(); } 
                 else { if(isUserAdmin) { setDoc(configRef, { isChatEnabled: true }); } globalConfig = { isChatEnabled: true }; }
+                yearContainers = Array.isArray(globalConfig.yearContainers) && globalConfig.yearContainers.length
+                    ? globalConfig.yearContainers.map(y => ({ ...y, id: String(y.id) })).sort((a,b) => (a.order || 0) - (b.order || 0))
+                    : DEFAULT_YEAR_CONTAINERS.map(y => ({ ...y }));
+                yearsConfigReady = true;
                 updateUIChatVisibility(globalConfig.isChatEnabled);
+                renderCurrentView();
             });
+        }
+
+        function getSectionYear(sectionData) { return String(sectionData?.yearId || '1447'); }
+        function getCurrentYear() { return yearContainers.find(y => y.id === currentYearId) || null; }
+        function updateYearNavigation() {
+            const bar = document.getElementById('year-navigation'), title = document.getElementById('current-view-title');
+            const backBtn = document.getElementById('back-to-years-btn'), addYearBtn = document.getElementById('add-year-btn');
+            const addSectionBtn = document.getElementById('add-section-btn'), printBtn = document.getElementById('print-sections-btn');
+            const year = getCurrentYear();
+            if (bar) bar.classList.remove('hidden');
+            if (title) title.textContent = year ? year.title : 'ملفات المدرسة حسب العام الدراسي';
+            if (backBtn) backBtn.classList.toggle('hidden', !year);
+            if (addYearBtn) addYearBtn.classList.toggle('hidden', !isUserAdmin || !!year);
+            if (addSectionBtn) { addSectionBtn.disabled = !year; addSectionBtn.classList.toggle('opacity-50', !year); addSectionBtn.title = year ? 'إضافة قسم داخل هذا العام' : 'افتح أحد الأعوام أولاً'; }
+            if (printBtn) { printBtn.disabled = !year; printBtn.classList.toggle('opacity-50', !year); printBtn.innerHTML = year ? '🖨️ طباعة جميع أقسام العام' : '🖨️ افتح عامًا للطباعة'; }
+        }
+
+        function renderYearOverview() {
+            if (!sectionsContainer) return;
+            sectionsContainer.innerHTML = '';
+            const visibleYears = yearContainers.filter(y => isUserAdmin || y.isVisible !== false);
+            visibleYears.forEach(year => {
+                const sectionDocs = latestSectionDocs.filter(d => { const data = d.data(), editors = data.editors || []; return getSectionYear(data) === year.id && (isUserAdmin || data.isVisible !== false || editors.includes(currentUserName)); });
+                const itemCount = sectionDocs.reduce((n, d) => n + ((d.data().items || []).length), 0);
+                const card = document.createElement('div');
+                card.className = 'year-card bg-white rounded-2xl shadow-xl border-t-8 border-teal-600 p-6 flex flex-col min-h-[230px]';
+                card.dataset.yearId = year.id;
+                card.innerHTML = `<div class="flex justify-between items-start gap-3"><div><span class="inline-block bg-teal-50 text-teal-700 px-3 py-1 rounded-full text-sm font-bold mb-3">${year.subtitle || 'عام دراسي'}</span><h2 class="text-2xl font-bold text-teal-900">${year.title}</h2></div><div class="flex flex-col gap-1">${year.isCurrent ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">الحالي</span>' : ''}${year.isVisible === false ? '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-bold">مخفي</span>' : ''}</div></div><div class="grid grid-cols-2 gap-3 my-6"><div class="bg-gray-50 rounded-lg p-3 text-center"><b class="block text-2xl text-teal-700">${sectionDocs.length}</b><span class="text-sm text-gray-600">قسم</span></div><div class="bg-gray-50 rounded-lg p-3 text-center"><b class="block text-2xl text-teal-700">${itemCount}</b><span class="text-sm text-gray-600">ملف ورابط</span></div></div><div class="mt-auto grid grid-cols-2 gap-2"><button class="open-year-btn bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700">فتح الأقسام</button><button class="copy-year-link-btn bg-green-50 text-green-700 py-3 rounded-lg font-bold">نسخ الرابط</button>${isUserAdmin ? `<button class="edit-year-btn bg-blue-50 text-blue-700 py-2 rounded-lg font-bold">تعديل الاسم</button><button class="toggle-year-btn ${year.isVisible === false ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'} py-2 rounded-lg font-bold">${year.isVisible === false ? 'إظهار للزوار' : 'إخفاء عن الزوار'}</button>` : ''}</div>`;
+                sectionsContainer.appendChild(card);
+            });
+            if (!visibleYears.length) sectionsContainer.innerHTML = '<p class="col-span-3 text-center text-gray-500">لا توجد حاويات أعوام ظاهرة.</p>';
+        }
+
+        function renderCurrentView() {
+            if (!currentYearId && requestedYearId && yearsConfigReady) {
+                const requested = yearContainers.find(y => y.id === String(requestedYearId));
+                if (requested && (isUserAdmin || requested.isVisible !== false)) currentYearId = requested.id;
+                requestedYearId = null;
+            }
+            const activeYear = getCurrentYear();
+            if (activeYear && activeYear.isVisible === false && !isUserAdmin) { currentYearId = null; setYearInAddress(null); }
+            updateYearNavigation();
+            if (!sectionsContainer || !latestSectionDocs) return;
+            if (!currentYearId) { renderYearOverview(); return; }
+            sectionsContainer.innerHTML = '';
+            const docs = latestSectionDocs.filter(d => getSectionYear(d.data()) === currentYearId);
+            if (!docs.length) sectionsContainer.innerHTML = '<div class="col-span-3 bg-white rounded-xl p-10 text-center text-gray-500 shadow">لا توجد أقسام في هذا العام. يمكن للمدير إضافة أول قسم من زر «إضافة».</div>';
+            docs.forEach(d => renderSection(d));
+            setupItemSorting(); setupSectionSorting(isUserAdmin);
+        }
+
+        async function saveYearContainers(nextYears) {
+            if (!isUserAdmin) return;
+            await setDoc(doc(db, configPath, 'appSettings'), { yearContainers: nextYears }, { merge: true });
+        }
+
+        async function addYearContainer() {
+            if (!isUserAdmin) return;
+            const raw = prompt('اكتب العام الهجري، مثال: 1449'); if (!raw) return;
+            const id = raw.replace(/[^0-9٠-٩]/g, '').trim(); if (!id) return;
+            if (yearContainers.some(y => y.id === id)) { showAlert('هذا العام موجود بالفعل.'); return; }
+            const title = prompt('اسم الحاوية:', `ملفات العام الدراسي ${id}هـ`) || `ملفات العام الدراسي ${id}هـ`;
+            const next = [{ id, title, subtitle: 'عام دراسي', order: 0, isCurrent: false, isVisible: true }, ...yearContainers.map((y, i) => ({ ...y, order: i + 1 }))];
+            try { await saveYearContainers(next); } catch (e) { showAlert('تعذر إضافة العام.'); }
+        }
+
+        async function editYearContainer(yearId) {
+            if (!isUserAdmin) return;
+            const year = yearContainers.find(y => y.id === yearId); if (!year) return;
+            const title = prompt('تعديل اسم الحاوية:', year.title); if (!title?.trim()) return;
+            const next = yearContainers.map(y => y.id === yearId ? { ...y, title: title.trim() } : y);
+            try { await saveYearContainers(next); } catch (e) { showAlert('تعذر تعديل اسم العام.'); }
+        }
+
+        async function toggleYearVisibility(yearId) {
+            if (!isUserAdmin) return;
+            const next = yearContainers.map(y => y.id === yearId ? { ...y, isVisible: y.isVisible === false } : y);
+            try { await saveYearContainers(next); } catch (e) { showAlert('تعذر تغيير ظهور العام.'); }
+        }
+
+        function buildYearLink(yearId) {
+            const url = new URL(window.location.href); url.searchParams.set('year', yearId); return url.href;
+        }
+
+        async function copyYearLink(yearId) {
+            const link = buildYearLink(yearId);
+            try { await navigator.clipboard.writeText(link); showAlert('✅ تم نسخ رابط العام.'); }
+            catch (e) { prompt('انسخ رابط العام:', link); }
+        }
+
+        function setYearInAddress(yearId) {
+            try { const url = new URL(window.location.href); if (yearId) url.searchParams.set('year', yearId); else url.searchParams.delete('year'); history.replaceState(null, '', url.href); } catch (e) {}
         }
 
         function updateUIChatVisibility(isEnabled) {
             const chatToggleBtn = document.getElementById('chat-toggle');
-            if (chatToggleBtn) chatToggleBtn.classList.toggle('hidden', !isEnabled);
-            if (!isEnabled && chatWindow && !chatWindow.classList.contains('hidden')) {
+            const shouldShow = !!isEnabled && !isGuestMode;
+            if (chatToggleBtn) chatToggleBtn.classList.toggle('hidden', !shouldShow);
+            if (!shouldShow && chatWindow && !chatWindow.classList.contains('hidden')) {
                 chatWindow.classList.add('hidden');
-                showAlert("تم تعطيل الدردشة من قبل المدير.");
+                if (!isGuestMode) showAlert("تم تعطيل الدردشة من قبل المدير.");
             }
         }
 
@@ -392,14 +516,17 @@
         function initializeAppLogic(userName) {
              if (!userName) return;
              updateUIForUser(userName, isUserAdmin);
-             setupAddSectionModal(); setupAddItemModal(); setupEditSectionModal(); setupEditItemModal(); setupAlertModal();
-             setupAdminManageModal(); setupAdminPermsModal(); setupAdminSettingsModal(); 
-             setupChatWindow(); initializeChatApp();
-             setupControlEvents(isUserAdmin); listenForSections();
+             if (!uiEventsInitialized) {
+                 uiEventsInitialized = true;
+                 setupAddSectionModal(); setupAddItemModal(); setupEditSectionModal(); setupEditItemModal(); setupAlertModal();
+                 setupAdminManageModal(); setupAdminPermsModal(); setupAdminSettingsModal();
+                 setupChatWindow(); initializeChatApp(); setupControlEvents();
+             }
+             listenForSections();
         }
 
         function updateUIForUser(name, isAdmin) {
-             if (userNameDisplay) userNameDisplay.textContent = `مرحباً بك، ${name} (${isAdmin ? 'مدير' : 'مشاهد'})`;
+             if (userNameDisplay) userNameDisplay.textContent = isGuestMode ? 'تصفح كزائر' : `مرحباً بك، ${name} (${isAdmin ? 'مدير' : 'مشاهد'})`;
             adminControls.forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) {
@@ -411,7 +538,7 @@
             generalControls.forEach(id => { const btn = document.getElementById(id); if (btn) btn.classList.remove('hidden'); });
             
             if (logoutBtn && loginAdminBtn) {
-                if (userId) { logoutBtn.classList.remove('hidden'); loginAdminBtn.classList.add('hidden'); } 
+                if (userId && !isGuestMode) { logoutBtn.classList.remove('hidden'); loginAdminBtn.classList.add('hidden'); } 
                 else { logoutBtn.classList.add('hidden'); loginAdminBtn.classList.remove('hidden'); }
             }
             const deleteAllChatBtnNav = document.getElementById('delete-all-chat-btn');
@@ -428,6 +555,7 @@
              const addSectionBtn = document.getElementById('add-section-btn');
              if (addSectionBtn) {
                  addSectionBtn.addEventListener('click', () => {
+                     if (!currentYearId) { showAlert('افتح حاوية العام التي تريد إضافة القسم داخلها أولاً.'); return; }
                      setSelectedIcon('add-section-icon-picker', 'section-icon', DEFAULT_ICON);
                      addSectionModal.classList.remove('hidden');
                      setTimeout(() => { if (addSectionModalContent) { addSectionModalContent.classList.remove('scale-95', 'opacity-0'); addSectionModalContent.classList.add('scale-100', 'opacity-100'); } }, 10);
@@ -466,14 +594,14 @@
             
             const tabLink = document.getElementById('tab-link'), tabFile = document.getElementById('tab-file'), linkSection = document.getElementById('link-input-section'), fileSection = document.getElementById('file-input-section');
             if (tabLink) tabLink.addEventListener('click', () => { linkSection.classList.remove('hidden'); fileSection.classList.add('hidden'); tabLink.classList.add('border-teal-500', 'text-teal-600'); tabLink.classList.remove('border-transparent', 'text-gray-500'); if (tabFile) { tabFile.classList.add('border-transparent', 'text-gray-500'); tabFile.classList.remove('border-teal-500', 'text-teal-600'); } if (itemTypeInput) itemTypeInput.value = 'link'; });
-            if (tabFile) tabFile.addEventListener('click', () => { showAlert('ميزة رفع الملفات قيد التطوير.'); });
+            if (tabFile) tabFile.addEventListener('click', () => { linkSection.classList.add('hidden'); fileSection.classList.remove('hidden'); tabFile.classList.add('border-teal-500', 'text-teal-600'); tabFile.classList.remove('border-transparent', 'text-gray-500'); if (tabLink) { tabLink.classList.add('border-transparent', 'text-gray-500'); tabLink.classList.remove('border-teal-500', 'text-teal-600'); } if (itemTypeInput) itemTypeInput.value = 'file'; });
             if (addItemForm) addItemForm.addEventListener('submit', handleItemFormSubmit);
         }
 
         function setupEditSectionModal() {
             editSectionModal = document.getElementById('edit-section-modal'); if (!editSectionModal) return;
             const closeBtn = document.getElementById('close-edit-section-modal'), cancelBtn = document.getElementById('cancel-edit-section-modal');
-            editSectionForm = document.getElementById('edit-section-form'); editSectionTitleInput = document.getElementById('edit-section-title'); editSectionIdInput = document.getElementById('edit-section-id');
+            editSectionForm = document.getElementById('edit-section-form'); editSectionTitleInput = document.getElementById('edit-section-title'); editSectionIdInput = document.getElementById('edit-section-id'); editSectionColorInput = document.getElementById('edit-section-color');
             currentEditorsList = document.getElementById('current-editors-list'); currentEditorsContainer = document.getElementById('current-editors-container');
             const editSectionVisibilityCheckbox = document.getElementById('edit-section-visibility'); 
             createIconPicker('edit-section-icon-picker', 'edit-section-icon');
@@ -488,6 +616,7 @@
                     if(editSectionTitleInput) editSectionTitleInput.value = sectionData.title || '';
                     if (editSectionIdInput) editSectionIdInput.value = sectionId;
                     if (editSectionVisibilityCheckbox) editSectionVisibilityCheckbox.checked = sectionData.isVisible !== false; 
+                    if (editSectionColorInput) editSectionColorInput.value = sectionData.headerColor || getSectionHeaderColor(sectionId);
                     setSelectedIcon('edit-section-icon-picker', 'edit-section-icon', sectionData.icon || DEFAULT_ICON);
                     await loadEditorsForSection(sectionId);
                     editSectionModal.classList.remove('hidden');
@@ -503,13 +632,14 @@
         function setupEditItemModal() {
             editItemModal = document.getElementById('edit-item-modal'); if (!editItemModal) return;
             const closeBtn = document.getElementById('close-edit-item-modal'), cancelBtn = document.getElementById('cancel-edit-item-modal');
-            editItemForm = document.getElementById('edit-item-form'); editItemTitleInput = document.getElementById('edit-item-title'); editItemLinkInput = document.getElementById('edit-item-link'); editItemIdInput = document.getElementById('edit-item-id'); editItemSectionIdInput = document.getElementById('edit-item-section-id');
+            editItemForm = document.getElementById('edit-item-form'); editItemTitleInput = document.getElementById('edit-item-title'); editItemLinkInput = document.getElementById('edit-item-link'); editItemIdInput = document.getElementById('edit-item-id'); editItemSectionIdInput = document.getElementById('edit-item-section-id'); editItemTargetSectionInput = document.getElementById('edit-item-target-section');
             if (!sectionsContainer) return;
             sectionsContainer.addEventListener('click', (e) => {
-                const editBtn = e.target.closest('.item-edit-btn-action'); 
+                const editBtn = e.target.closest('.item-edit-btn-action, .item-edit-btn-desktop'); 
                 const sectionEl = editBtn ? editBtn.closest('.column-wrapper') : null;
                 const canEdit = isUserAdmin || (sectionEl && sectionEl.dataset.canEdit === 'true');
                 if (editBtn && canEdit) {
+                    e.preventDefault(); e.stopPropagation();
                     const itemEl = editBtn.closest('.item-card'); if (!itemEl || !sectionEl) return;
                     const popup = editBtn.closest('.item-action-popup'); if (popup) popup.classList.add('hidden');
                     const itemId = itemEl.dataset.itemId, sectionId = sectionEl.dataset.sectionId, linkElement = itemEl.querySelector('a');
@@ -517,12 +647,23 @@
                     if(editItemLinkInput) editItemLinkInput.value = linkElement ? linkElement.href : '';
                     if(editItemIdInput) editItemIdInput.value = itemId; 
                     if(editItemSectionIdInput) editItemSectionIdInput.value = sectionId;
+                    if (editItemTargetSectionInput) {
+                        editItemTargetSectionInput.innerHTML = '';
+                        latestSectionDocs.filter(d => {
+                            const data = d.data(), allowed = isUserAdmin || (data.editors || []).includes(currentUserName);
+                            return getSectionYear(data) === currentYearId && allowed;
+                        }).forEach(d => {
+                            const option = document.createElement('option'); option.value = d.id; option.textContent = d.data().title || 'بدون عنوان'; option.selected = d.id === sectionId; editItemTargetSectionInput.appendChild(option);
+                        });
+                    }
+                    editItemModalOpenedAt = Date.now();
                     editItemModal.classList.remove('hidden');
+                    setTimeout(() => editItemTitleInput?.focus(), 50);
                 }
             });
             const close = () => editItemModal.classList.add('hidden');
             if (closeBtn) closeBtn.addEventListener('click', close); if(cancelBtn) cancelBtn.addEventListener('click', close);
-            editItemModal.addEventListener('click', (e) => (e.target === editItemModal) && close());
+            editItemModal.addEventListener('click', (e) => { if (e.target === editItemModal && Date.now() - editItemModalOpenedAt > 500) close(); });
             if (editItemForm) editItemForm.addEventListener('submit', handleEditItemFormSubmit);
         }
         
@@ -761,23 +902,33 @@
         // --- CRUD الأقسام والعناصر ---
         async function handleSectionFormSubmit(e) {
             e.preventDefault();
+            if (sectionSubmitBusy) return;
             const titleInput = document.getElementById('section-title'), visibilityCheckbox = document.getElementById('section-visibility'), iconInput = document.getElementById('section-icon');
             if (!titleInput) return;
             const newTitle = titleInput.value.trim(), isVisible = visibilityCheckbox ? visibilityCheckbox.checked : true, newIcon = iconInput ? iconInput.value : DEFAULT_ICON;
             const newOrder = (await getDocs(sectionsCollectionRef)).size;
             if (!newTitle) return;
-            try { await addDoc(sectionsCollectionRef, { title: newTitle, icon: newIcon, items: [], editors: [], isVisible: isVisible, order: newOrder }); document.getElementById('close-section-modal').click(); } 
-            catch (error) { showAlert("❌ فشل إضافة القسم."); }
+            const submitBtn = e.submitter || addSectionForm?.querySelector('button[type="submit"]');
+            sectionSubmitBusy = true; if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'جارٍ الإضافة...'; }
+            try {
+                const duplicateQuery = query(sectionsCollectionRef, where('title', '==', newTitle));
+                if (!(await getDocs(duplicateQuery)).empty) { showAlert('يوجد قسم بهذا الاسم بالفعل.'); return; }
+                await addDoc(sectionsCollectionRef, { title: newTitle, icon: newIcon, items: [], editors: [], isVisible: isVisible, order: newOrder, yearId: currentYearId || '1448', createdAt: serverTimestamp() });
+                document.getElementById('close-section-modal').click();
+            } catch (error) { showAlert("❌ تعذر إضافة القسم. تحقق من الاتصال ثم أعد المحاولة."); }
+            finally { sectionSubmitBusy = false; if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'إضافة'; } }
         }
 
         function listenForSections() {
              if (!sectionsCollectionRef) return;
+            if (sectionsUnsubscribe) sectionsUnsubscribe();
             const sectionsQuery = query(sectionsCollectionRef, orderBy("order"));
-            onSnapshot(sectionsQuery, (snapshot) => {
-                if (sectionsContainer) sectionsContainer.innerHTML = '';
-                if(snapshot.empty && sectionsContainer) sectionsContainer.innerHTML = `<p class="text-gray-500 text-center col-span-3">لا توجد أقسام.</p>`;
-                snapshot.docs.forEach((doc) => { renderSection(doc); });
-                setupItemSorting(); setupSectionSorting(isUserAdmin);
+            sectionsUnsubscribe = onSnapshot(sectionsQuery, (snapshot) => {
+                latestSectionDocs = snapshot.docs;
+                renderCurrentView();
+            }, (error) => {
+                if (sectionsContainer) sectionsContainer.innerHTML = '<div class="col-span-3 bg-white rounded-xl shadow p-8 text-center"><h3 class="text-lg font-bold text-red-600 mb-2">تعذر عرض الملفات للزائر</h3><p class="text-gray-600">يلزم تفعيل الدخول المجهول في Firebase أو السماح بقراءة الأقسام للزوار.</p><button id="guest-login-fallback" class="mt-4 bg-teal-600 text-white px-5 py-2 rounded-lg">دخول المستخدم</button></div>';
+                document.getElementById('guest-login-fallback')?.addEventListener('click', () => loginModal?.classList.remove('hidden'));
             });
         }
         
@@ -839,8 +990,9 @@
             const sectionId = editSectionIdInput ? editSectionIdInput.value : '';
             const newVisibility = document.getElementById('edit-section-visibility') ? document.getElementById('edit-section-visibility').checked : true;
             const newIcon = document.getElementById('edit-section-icon')?.value || DEFAULT_ICON;
+            const headerColor = editSectionColorInput?.value || getSectionHeaderColor(sectionId);
             if (!newTitle || !sectionId) return;
-            try { await updateDoc(doc(db, sectionsPath, sectionId), { title: newTitle, isVisible: newVisibility, icon: newIcon }); if(editSectionModal) editSectionModal.classList.add('hidden'); } 
+            try { await updateDoc(doc(db, sectionsPath, sectionId), { title: newTitle, isVisible: newVisibility, icon: newIcon, headerColor }); if(editSectionModal) editSectionModal.classList.add('hidden'); } 
             catch (error) { showAlert("❌ فشل تعديل القسم."); }
         }
 
@@ -867,29 +1019,72 @@
 
         async function handleItemFormSubmit(e) {
             e.preventDefault();
+            if (itemSubmitBusy) return;
             const title = document.getElementById('item-title').value.trim(), sectionId = columnIdInput.value, itemType = itemTypeInput.value;
             if (!title || !sectionId) return;
             let newItemData = { id: crypto.randomUUID(), title: title, type: itemType };
-            if (itemType === 'link') { const link = document.getElementById('item-link').value.trim(); if (!link) return; newItemData.url = link; } 
-            else { showAlert("ميزة رفع الملفات قيد التطوير."); return; }
-            try { await updateDoc(doc(db, sectionsPath, sectionId), { items: arrayUnion(newItemData) }); document.getElementById('close-modal').click(); } 
-            catch (error) { showAlert("❌ فشل إضافة العنصر."); }
+            const submitBtn = e.submitter || addItemForm?.querySelector('button[type="submit"]');
+            itemSubmitBusy = true; if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = itemType === 'file' ? 'جارٍ رفع PDF...' : 'جارٍ الإضافة...'; }
+            try {
+                if (itemType === 'link') {
+                    let link = document.getElementById('item-link').value.trim(); if (!link) return;
+                    if (!/^https?:\/\//i.test(link)) link = `https://${link}`;
+                    new URL(link); newItemData.url = link;
+                } else {
+                    const file = document.getElementById('item-file')?.files?.[0];
+                    if (!file) { showAlert('اختر ملف PDF أولاً.'); return; }
+                    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { showAlert('المسموح ملفات PDF فقط.'); return; }
+                    if (file.size > 25 * 1024 * 1024) { showAlert('حجم الملف أكبر من 25 ميجابايت.'); return; }
+                    const safeName = file.name.replace(/[^\w.\-\u0600-\u06FF]/g, '_');
+                    const path = `school-files/${userId || 'admin'}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+                    const fileRef = storageRef(storage, path);
+                    await uploadBytes(fileRef, file, { contentType: 'application/pdf' });
+                    newItemData.url = await getDownloadURL(fileRef); newItemData.fileName = file.name;
+                    newItemData.fileSize = file.size; newItemData.contentType = 'application/pdf'; newItemData.storagePath = path;
+                }
+                await updateDoc(doc(db, sectionsPath, sectionId), { items: arrayUnion(newItemData) });
+                if (addItemModal) addItemModal.classList.add('hidden');
+                if (addItemForm) addItemForm.reset();
+                if (itemTypeInput) itemTypeInput.value = 'link';
+                showAlert(itemType === 'file' ? '✅ تم رفع ملف PDF وإضافته.' : '✅ تم إضافة الرابط بنجاح.');
+            } catch (error) {
+                const message = itemType === 'file' ? 'تعذر رفع PDF. راجع تفعيل Storage وقواعده، أو استخدم رابط Google Drive مؤقتًا.' : 'تعذر إضافة الرابط. تحقق من صحته والاتصال.';
+                showAlert(`❌ ${message}`);
+            } finally { itemSubmitBusy = false; if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'إضافة'; } }
         }
 
         async function handleEditItemFormSubmit(e) {
             e.preventDefault();
-            const sectionId = editItemSectionIdInput.value, itemId = editItemIdInput.value, newTitle = editItemTitleInput.value.trim(), newLink = editItemLinkInput.value.trim();
+            if (editItemSubmitBusy) return;
+            const sectionId = editItemSectionIdInput.value, itemId = editItemIdInput.value, newTitle = editItemTitleInput.value.trim();
+            const targetSectionId = editItemTargetSectionInput?.value || sectionId;
+            let newLink = editItemLinkInput.value.trim();
             if (!sectionId || !itemId || !newTitle || !newLink) return;
+            if (!/^https?:\/\//i.test(newLink)) newLink = `https://${newLink}`;
+            try { new URL(newLink); } catch (error) { showAlert('الرابط غير صحيح.'); return; }
+            const submitBtn = e.submitter || editItemForm?.querySelector('button[type="submit"]');
+            editItemSubmitBusy = true; if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'جارٍ الحفظ...'; }
             try {
                 const sectionRef = doc(db, sectionsPath, sectionId);
                 const sectionSnap = await getDoc(sectionRef);
                 if (sectionSnap.exists()) {
                     let items = sectionSnap.data().items || [];
-                    const updatedItems = items.map(item => (item.id === itemId ? { ...item, title: newTitle, url: newLink } : item));
-                    await updateDoc(sectionRef, { items: updatedItems });
-                    document.getElementById('close-edit-item-modal').click();
+                    const originalItem = items.find(item => item.id === itemId); if (!originalItem) throw new Error('item-not-found');
+                    const updatedItem = { ...originalItem, title: newTitle, url: newLink };
+                    if (targetSectionId !== sectionId) {
+                        const targetRef = doc(db, sectionsPath, targetSectionId), targetSnap = await getDoc(targetRef); if (!targetSnap.exists()) throw new Error('target-not-found');
+                        const batch = writeBatch(db);
+                        batch.update(sectionRef, { items: items.filter(item => item.id !== itemId) });
+                        batch.update(targetRef, { items: [...(targetSnap.data().items || []), updatedItem] });
+                        await batch.commit();
+                    } else {
+                        await updateDoc(sectionRef, { items: items.map(item => item.id === itemId ? updatedItem : item) });
+                    }
+                    if (editItemModal) editItemModal.classList.add('hidden');
+                    showAlert(targetSectionId !== sectionId ? '✅ تم تعديل الرابط ونقله إلى القسم المختار.' : '✅ تم تعديل الرابط بنجاح.');
                 }
-            } catch (error) { showAlert("❌ فشل تعديل العنصر."); }
+            } catch (error) { showAlert("❌ تعذر تعديل الرابط. تحقق من الاتصال ثم أعد المحاولة."); }
+            finally { editItemSubmitBusy = false; if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'حفظ'; } }
         }
 
         async function deleteItem(sectionId, itemId) {
@@ -912,14 +1107,22 @@
         }
 
         // --- Render ---
+        function getSectionHeaderColor(sectionId) {
+            const colors = ['#E5F7F3', '#E8F3FC', '#FFF3D6', '#EAF7E7', '#FFF0E8', '#E8F5F0'];
+            const hash = String(sectionId || '').split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+            return colors[hash % colors.length];
+        }
+
         function renderSection(doc) {
             const section = doc.data(), sectionId = doc.id, editors = section.editors || []; 
             const userCanEditThisSection = currentUserRole !== 'suspended' && (isUserAdmin || editors.includes(currentUserName)); 
             const sectionIcon = section.icon || DEFAULT_ICON;
-            if (section.isVisible === false && !isUserAdmin) return;
+            if (section.isVisible === false && !isUserAdmin && !editors.includes(currentUserName)) return;
 
             const sectionDiv = document.createElement('div'); sectionDiv.className = "bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col column-wrapper"; sectionDiv.dataset.sectionId = sectionId; sectionDiv.dataset.canEdit = userCanEditThisSection; 
-            const headerDiv = document.createElement('div'); headerDiv.className = "column-header p-5 border-b border-gray-200 bg-gray-50 flex justify-between items-center";
+            const headerDiv = document.createElement('div'); headerDiv.className = "column-header p-5 border-b flex justify-between items-center";
+            headerDiv.style.background = section.headerColor || getSectionHeaderColor(sectionId);
+            headerDiv.style.borderColor = 'rgba(13, 148, 136, .20)';
             headerDiv.innerHTML = `${isUserAdmin ? `<div class="section-drag-handle" title="سحب"><svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg></div>` : ''} <h2 class="text-2xl font-bold text-teal-800 flex items-center gap-3 flex-1 min-w-0"><span class="section-title-icon">${sectionIcon}</span> <span class="section-title-text">${section.title || 'بدون عنوان'}</span></h2><div class="flex items-center gap-2 flex-shrink-0">${userCanEditThisSection ? `<button class="section-edit-btn p-1 text-blue-500 hover:text-blue-700" title="تعديل"><svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg></button>${isUserAdmin ? `<button class="section-delete-btn p-1 text-red-500 hover:text-red-700" title="حذف"><svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg></button>` : ''}` : ''}<button class="section-print-btn p-1 text-green-500 hover:text-green-700" title="طباعة"><svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0113.25 8H6.75A1.75 1.75 0 015 6.25v-3.5zm.75 0v3.5c0 .138.112.25.25.25h6.5a.25.25 0 00.25-.25v-3.5a.25.25 0 00-.25-.25h-6.5a.25.25 0 00-.25.25zM6 10.75A.75.75 0 016.75 10h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 016 10.75zM6 13.75A.75.75 0 016.75 13h6.5a.75.75 0 010 1.5h-6.5A.75.75 0 016 13.75zM3.25 9A1.75 1.75 0 001.5 10.75v3.5c0 .966.784 1.75 1.75 1.75h1.25a.75.75 0 010 1.5H3.25A3.25 3.25 0 010 14.25v-3.5A3.25 3.25 0 013.25 7.5h13.5A3.25 3.25 0 0120 10.75v3.5A3.25 3.25 0 0116.75 17.5h-1.25a.75.75 0 010-1.5h1.25A1.75 1.75 0 0018.5 14.25v-3.5A1.75 1.75 0 0016.75 9H3.25z" clip-rule="evenodd" /></svg></button><button class="section-share-btn p-1 text-green-500 hover:text-green-600" title="مشاركة"><svg class="w-5 h-5" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg></button></div>`;
             sectionDiv.appendChild(headerDiv);
             const listDiv = document.createElement('div'); listDiv.className = "p-4 space-y-3 flex-grow column-list"; listDiv.dataset.sectionTitle = section.title || 'بدون عنوان';
@@ -929,6 +1132,7 @@
             sectionDiv.appendChild(listDiv);
             const footerDiv = document.createElement('div'); footerDiv.className = "p-4 bg-gray-100 border-t";
             footerDiv.innerHTML = userCanEditThisSection ? `<button class="add-item-btn w-full bg-teal-600 text-white py-3 px-4 rounded-lg font-bold hover:bg-teal-700 flex items-center justify-center gap-2" data-column-id="${sectionId}"><svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg> إضافة عنصر</button>` : `<button class="request-control-btn w-full bg-yellow-500 text-white py-3 px-4 rounded-lg font-bold hover:bg-yellow-600 flex items-center justify-center gap-2" data-section-id="${sectionId}" data-section-title="${section.title || ''}"><svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg> طلب تحكم</button>`;
+            if (isGuestMode) footerDiv.classList.add('hidden');
             sectionDiv.appendChild(footerDiv);
             if (sectionsContainer) sectionsContainer.appendChild(sectionDiv);
         }
@@ -936,11 +1140,11 @@
         function renderItem(item, canEdit, sectionId) { 
             if (!item || !item.id) return document.createElement('div');
             const itemDiv = document.createElement('div'); itemDiv.className = "group item-card bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow relative item-wrapper flex items-center";
-            itemDiv.dataset.itemId = item.id; itemDiv.dataset.sectionId = sectionId;
-            let href = item.url || '#', target = (item.type === 'link' && item.url) ? 'target="_blank" rel="noopener noreferrer"' : '';
+            itemDiv.dataset.itemId = item.id; itemDiv.dataset.sectionId = sectionId; itemDiv.dataset.itemType = item.type || 'link'; itemDiv.dataset.itemUrl = item.url || ''; itemDiv.dataset.fileName = item.fileName || '';
+            let href = item.url || '#', target = item.url ? 'target="_blank" rel="noopener noreferrer"' : '';
             const formattedTitle = replaceEmojis(item.title);
             const itemTypeIcon = (item.type === 'link') ? `<svg class="w-6 h-6 text-blue-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>` : `<svg class="w-6 h-6 text-green-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625a3.375 3.375 0 00-3.375 3.375v11.25a3.375 3.375 0 003.375 3.375h12.75a3.375 3.375 0 003.375-3.375V12M10.5 1.5H18" /></svg>`;
-            const selectionCheckbox = (item.type === 'link' && item.url) ? `<input type="checkbox" class="item-selection-checkbox" data-item-id="${item.id}" data-item-title="${item.title || ''}" data-item-url="${item.url}" onchange="handleItemSelection(this)" ${selectionBasket.some(b => b.id === item.id) ? 'checked' : ''}>` : '<div class="w-5 mr-3"></div>';
+            const selectionCheckbox = item.url ? `<input type="checkbox" class="item-selection-checkbox" data-item-id="${item.id}" data-item-title="${item.title || ''}" data-item-url="${item.url}" onchange="handleItemSelection(this)" ${selectionBasket.some(b => b.id === item.id) ? 'checked' : ''}>` : '<div class="w-5 mr-3"></div>';
             itemDiv.innerHTML = `${selectionCheckbox} ${canEdit ? `<div class="drag-handle text-teal-800 hover:bg-gray-100 hidden md:flex md:group-hover:flex" title="سحب"><svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M12 17.25h8.25"/></svg></div>` : ''} <div class="flex items-center gap-3 flex-1 min-w-0"> ${itemTypeIcon} <a href="${href}" ${target} class="font-semibold text-gray-800 hover:text-teal-600 transition-colors flex-grow min-w-0 overflow-hidden"> <span class="block">${formattedTitle || 'بدون عنوان'}</span> </a> </div> <div class="flex items-center gap-1 flex-shrink-0 mr-2 relative"> <button class="item-share-btn p-1 text-green-500 hover:text-green-600" title="مشاركة"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16"> <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 014.66 1.931 6.557 6.557 0 011.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/> </svg></button> ${canEdit ? `<div class="hidden md:flex md:group-hover:flex items-center gap-1 flex-shrink-0"><button class="item-edit-btn-desktop p-1 text-blue-500 hover:text-blue-700"><svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" /></svg></button><button class="item-delete-btn-desktop p-1 text-red-500 hover:text-red-700"><svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12.578 0a48.09 48.09 0 013.478-.397m7.5 0a48.09 48.09 0 00-7.5 0" /></svg></button></div> <button class="item-action-btn md:hidden p-1 text-gray-500 hover:text-gray-700" onclick="showItemActionsPopup(this)"><svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" /></svg></button> <div class="item-action-popup hidden action-popup bg-white border border-gray-200 rounded-lg shadow-xl py-1"><button class="item-edit-btn-action w-full text-right px-4 py-2 text-sm text-blue-600 hover:bg-gray-100 flex items-center gap-2" data-item-id="${item.id}" data-section-id="${sectionId}">تعديل</button><button class="item-delete-btn-action w-full text-right px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flex items-center gap-2" onclick="if(confirm('حذف؟')) { deleteItem('${sectionId}', '${item.id}'); document.querySelector('.item-action-popup:not(.hidden)').classList.add('hidden'); }">حذف</button></div>` : ''} </div>`;
             return itemDiv;
         }
@@ -962,15 +1166,18 @@
             const itemsBySection = selectionBasket.reduce((acc, item) => { if (!acc[item.sectionTitle]) acc[item.sectionTitle] = []; acc[item.sectionTitle].push(item); return acc; }, {});
             let message = "*ملفات من منصة الراشدون:*\n\n";
             for (const sectionTitle in itemsBySection) { message += `*${sectionTitle}*\n`; itemsBySection[sectionTitle].forEach(item => { message += `${item.title}\n${item.url}\n\n`; }); }
-            window.open(`https://wa.me/?text=${encodeURIComponent(message.trim())}`, '_blank'); clearSelection();
+            const phone = prompt('رقم المستلم اختياري. اكتب الرقم أو اتركه فارغًا لاختيار جهة من واتساب:', '');
+            if (phone === null) return;
+            openWhatsAppMessage(message.trim(), phone); clearSelection();
         }
 
         async function createPdfPageFromHTML(doc, sectionTitle, sectionIcon, itemChunk, isFirstPage, reportTitle = "تقرير منصة الراشدون") {
             const printContainer = document.createElement('div'); printContainer.className = 'print-container';
             const superHeader = document.createElement('div'); superHeader.className = 'print-super-header';
-            superHeader.innerHTML = `<div>المملكة العربية السعودية</div><div>وزارة التعليم</div><div>الإدارة العامة للتعليم بمنطقة عسير</div><div>ابتدائية ومتوسطة الراشدون بالمربع</div>`;
+            superHeader.innerHTML = `<img src="${MINISTRY_LOGO_DATA}" alt="شعار وزارة التعليم"><div class="print-school-details"><div>المملكة العربية السعودية</div><div>وزارة التعليم</div><div>الإدارة العامة للتعليم بمنطقة عسير</div><strong>ابتدائية ومتوسطة الراشدون بالمربع</strong></div><img src="${VISION_LOGO_DATA}" alt="شعار رؤية 2030">`;
             printContainer.appendChild(superHeader);
-            const header = document.createElement('div'); header.className = 'print-header'; header.innerHTML = `<h1>${reportTitle}</h1>`; printContainer.appendChild(header);
+            const yearTitle = getCurrentYear()?.title || '';
+            const header = document.createElement('div'); header.className = 'print-header'; header.innerHTML = `<h1>${reportTitle}</h1>${yearTitle ? `<p>${yearTitle}</p>` : ''}`; printContainer.appendChild(header);
             const contentWrapper = document.createElement('div'); contentWrapper.className = 'print-content-wrapper';
             const sectionDiv = document.createElement('div'); sectionDiv.className = 'print-section';
             const titleDiv = document.createElement('div'); titleDiv.className = 'print-section-title'; titleDiv.textContent = `${sectionIcon} ${sectionTitle || 'بدون عنوان'}`; sectionDiv.appendChild(titleDiv);
@@ -992,7 +1199,7 @@
                         textDiv.appendChild(subTitle);
                     }
 
-                    const url = (item.type === 'link' && item.url) ? item.url : '';
+                    const url = item.url || '';
                     let linkHintDiv = null;
                     if (url) {
                         linkHintDiv = document.createElement('div');
@@ -1118,20 +1325,72 @@
         async function clearChatUnreadCount(cid) { if (!userId) return; try { await setDoc(chatPaths.userChatStateDoc(userId, cid), { unreadCount: 0 }, { merge: true }); } catch (e) {} }
         window.deleteAllChats = async function() { if (!isUserAdmin || !confirm("حذف الكل؟")) return; try { const b = writeBatch(db); (await getDocs(chatPaths.groupChatCollection())).forEach(d => b.delete(d.ref)); await b.commit(); showAlert("تم الحذف."); } catch(e){} }
         function showAlert(msg) { const m = document.getElementById('alert-modal'); if (m) { document.getElementById('alert-modal-message').textContent = msg; m.classList.remove('hidden'); setTimeout(()=>document.getElementById('alert-modal-content').classList.remove('opacity-0'), 10); } }
-        function shareItemViaWhatsApp(t, u) { window.open(`https://wa.me/?text=${encodeURIComponent(`${t}\n${u}`)}`, '_blank'); }
-        async function shareSectionViaWhatsApp(sid) { const d = await getSectionDataById(sid); if(d) { let m = `*${d.title}*\n`; (d.items||[]).forEach(i=>m+=`${i.title}\n${i.url}\n`); window.open(`https://wa.me/?text=${encodeURIComponent(m)}`, '_blank'); } }
-        function setupControlEvents(isAdmin) { 
+        let pendingShareItem = null;
+        function normalizeWhatsAppNumber(value) {
+            let number = String(value || '').replace(/\D/g, '');
+            if (!number) return '';
+            if (number.startsWith('00966')) number = number.slice(2);
+            else if (number.startsWith('05') && number.length === 10) number = `966${number.slice(1)}`;
+            else if (number.startsWith('5') && number.length === 9) number = `966${number}`;
+            if (number.length < 8 || number.length > 15) return null;
+            return number;
+        }
+        function openWhatsAppMessage(message, phone = '') {
+            const number = normalizeWhatsAppNumber(phone);
+            if (number === null) { showAlert('رقم واتساب غير صحيح. اكتب الرقم مع مفتاح الدولة أو رقمًا سعوديًا يبدأ بـ05.'); return false; }
+            const destination = number ? `https://wa.me/${number}` : 'https://wa.me/';
+            window.open(`${destination}?text=${encodeURIComponent(message)}`, '_blank'); return true;
+        }
+        function shareItemViaWhatsApp(t, u, phone = '') { return openWhatsAppMessage(`${t}\n${u}`, phone); }
+        function showItemShareOptions(card) {
+            const title = card.querySelector('a span')?.textContent?.trim() || 'ملف من منصة الراشدون';
+            pendingShareItem = { title, url: card.dataset.itemUrl || card.querySelector('a')?.href || '', type: card.dataset.itemType || 'link', fileName: card.dataset.fileName || `${title}.pdf` };
+            const phoneInput = document.getElementById('share-phone-number'); if (phoneInput) phoneInput.value = '';
+            const fileBtn = document.getElementById('share-as-file-btn');
+            if (fileBtn) fileBtn.classList.toggle('hidden', pendingShareItem.type !== 'file');
+            document.getElementById('share-options-modal')?.classList.remove('hidden');
+        }
+        function closeShareOptions() { document.getElementById('share-options-modal')?.classList.add('hidden'); pendingShareItem = null; }
+        async function sharePdfAsFile() {
+            const item = pendingShareItem; if (!item?.url) return;
+            const fileBtn = document.getElementById('share-as-file-btn');
+            try {
+                if (fileBtn) { fileBtn.disabled = true; fileBtn.textContent = 'جارٍ تجهيز الملف...'; }
+                const response = await fetch(item.url); if (!response.ok) throw new Error('download-failed');
+                const blob = await response.blob();
+                const finalName = item.fileName.toLowerCase().endsWith('.pdf') ? item.fileName : `${item.fileName}.pdf`;
+                const file = new File([blob], finalName, { type: 'application/pdf' });
+                if (!navigator.share || (navigator.canShare && !navigator.canShare({ files: [file] }))) throw new Error('share-not-supported');
+                await navigator.share({ title: item.title, text: item.title, files: [file] }); closeShareOptions();
+            } catch (error) {
+                if (error?.name !== 'AbortError') { window.open(item.url, '_blank'); showAlert('هذا الجهاز لا يدعم إرفاق الملف مباشرة من المتصفح؛ فُتح PDF لتنزيله ثم إرساله عبر واتساب.'); }
+            } finally { if (fileBtn) { fileBtn.disabled = false; fileBtn.textContent = 'إرسال ملف PDF نفسه'; } }
+        }
+        window.closeShareOptions = closeShareOptions;
+        window.sharePendingLink = () => { if (!pendingShareItem) return; const phone = document.getElementById('share-phone-number')?.value || ''; if (shareItemViaWhatsApp(pendingShareItem.title, pendingShareItem.url, phone)) closeShareOptions(); };
+        window.sharePdfAsFile = sharePdfAsFile;
+        async function shareSectionViaWhatsApp(sid) { const d = await getSectionDataById(sid); if(d) { let m = `*${d.title}*\n`; (d.items||[]).forEach(i=>m+=`${i.title}\n${i.url}\n`); const phone = prompt('رقم المستلم اختياري. اكتب الرقم أو اتركه فارغًا لاختيار جهة من واتساب:', ''); if (phone !== null) openWhatsAppMessage(m, phone); } }
+        function setupControlEvents() { 
             if (logoutBtn) logoutBtn.addEventListener('click', async () => { if(confirm("خروج؟")) await signOut(auth); });
             document.getElementById('print-sections-btn')?.addEventListener('click', () => generatePdfForSections(null));
-            if (deleteAllChatBtn && isAdmin) deleteAllChatBtn.addEventListener('click', deleteAllChats);
+            document.getElementById('back-to-years-btn')?.addEventListener('click', () => { currentYearId = null; setYearInAddress(null); clearSelection(); renderCurrentView(); });
+            document.getElementById('add-year-btn')?.addEventListener('click', addYearContainer);
+            if (deleteAllChatBtn) deleteAllChatBtn.addEventListener('click', () => { if (isUserAdmin) deleteAllChats(); });
             if (sectionsContainer) sectionsContainer.addEventListener('click', async (e) => {
+                const openYearBtn = e.target.closest('.open-year-btn');
+                if (openYearBtn) { currentYearId = openYearBtn.closest('.year-card')?.dataset.yearId || null; setYearInAddress(currentYearId); clearSelection(); renderCurrentView(); return; }
+                const copyYearBtn = e.target.closest('.copy-year-link-btn');
+                if (copyYearBtn) { await copyYearLink(copyYearBtn.closest('.year-card')?.dataset.yearId); return; }
+                const editYearBtn = e.target.closest('.edit-year-btn');
+                if (editYearBtn) { await editYearContainer(editYearBtn.closest('.year-card')?.dataset.yearId); return; }
+                const toggleYearBtn = e.target.closest('.toggle-year-btn');
+                if (toggleYearBtn) { await toggleYearVisibility(toggleYearBtn.closest('.year-card')?.dataset.yearId); return; }
                 if (e.target.closest('.request-control-btn') && !isUserAdmin) requestSectionControl(e.target.closest('.request-control-btn').dataset.sectionId, e.target.closest('.request-control-btn').dataset.sectionTitle);
                 const delBtn = e.target.closest('.item-delete-btn-desktop'); if (delBtn && confirm('حذف؟')) deleteItem(delBtn.closest('.item-card').dataset.sectionId, delBtn.closest('.item-card').dataset.itemId);
-                const editBtn = e.target.closest('.item-edit-btn-desktop'); if (editBtn) editBtn.closest('.item-card').querySelector('.item-edit-btn-action')?.click();
-                const delSec = e.target.closest('.section-delete-btn'); if (delSec && isAdmin) deleteSection(delSec.closest('.column-wrapper').dataset.sectionId);
+                const delSec = e.target.closest('.section-delete-btn'); if (delSec && isUserAdmin) deleteSection(delSec.closest('.column-wrapper').dataset.sectionId);
                 const prSec = e.target.closest('.section-print-btn'); if (prSec) generatePdfForSections(prSec.closest('.column-wrapper'));
                 const shSec = e.target.closest('.section-share-btn'); if (shSec) shareSectionViaWhatsApp(shSec.closest('.column-wrapper').dataset.sectionId);
-                const shItm = e.target.closest('.item-share-btn'); if (shItm) shareItemViaWhatsApp(shItm.closest('.item-card').querySelector('a span')?.textContent, shItm.closest('.item-card').querySelector('a')?.href);
+                const shItm = e.target.closest('.item-share-btn'); if (shItm) showItemShareOptions(shItm.closest('.item-card'));
             });
         }
     </script>
@@ -1188,16 +1447,23 @@
                 </button>
             </div>
         </nav>
+        <div id="year-navigation" class="hidden bg-gradient-to-l from-teal-50 to-white border-b border-teal-100 px-4 py-4">
+            <div class="container mx-auto flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3"><button id="back-to-years-btn" class="hidden bg-white border border-teal-300 text-teal-800 px-4 py-2 rounded-lg font-bold hover:bg-teal-50">← الرجوع للأعوام</button><div><p class="text-xs text-teal-600 font-bold">منصة ملفات مدرسة الراشدون</p><h2 id="current-view-title" class="text-xl font-bold text-gray-800">ملفات المدرسة حسب العام الدراسي</h2></div></div>
+                <button id="add-year-btn" class="hidden bg-teal-700 text-white px-4 py-2 rounded-lg font-bold hover:bg-teal-800">＋ إضافة عام</button>
+            </div>
+        </div>
         <main class="flex-grow p-4 md:p-8"><div id="sections-container" class="container mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"><p id="initial-loading-message" class="text-gray-500 text-center col-span-3 text-xl p-10">جاري الاتصال...</p></div></main>
     </div>
     <div id="selection-bar" class="bg-gray-800 text-white shadow-lg p-3"><div class="container mx-auto flex flex-wrap justify-center md:justify-between items-center gap-3"><span class="text-lg font-semibold">تم التحديد:</span><div class="flex flex-wrap justify-center gap-3"><button id="selection-share-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">مشاركة <span id="selection-count-share"></span></button><button id="selection-print-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">طباعة <span id="selection-count-print"></span></button><button id="selection-clear-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">إلغاء</button></div></div></div>
     <div class="fixed bottom-6 right-6 z-50"><button id="chat-toggle" class="bg-blue-600 text-white rounded-full w-16 h-16 flex items-center justify-center shadow-xl hover:scale-110 transition-transform relative"><svg class="w-8 h-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 011.037-.443h2.88a1.875 1.875 0 001.875-1.875V16.5m-13.5-3.825V6.375c0-1.6 1.123-2.994 2.707-3.227 1.087.16 2.185.283 3.293.369V3l4.076 4.076a1.526 1.526 0 011.037.443h2.88a1.875 1.875 0 011.875 1.875v1.65M16.5 12V6.375m0 5.625v3.825m0 0v3.75m-13.5-3.75h13.5" /></svg><span id="chat-total-badge" class="hidden absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">0</span></button></div>
     <div id="login-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[100] p-4"><div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md text-center"><h2 class="text-3xl font-bold mb-2">تسجيل الدخول</h2><form id="login-form"><input type="text" id="user-name-input" class="w-full px-4 py-3 border mb-4 rounded-lg" placeholder="الاسم"><input type="email" id="user-email-input" required class="w-full px-4 py-3 border mb-4 rounded-lg" placeholder="البريد"><input type="password" id="user-password-input" required class="w-full px-4 py-3 border mb-4 rounded-lg" placeholder="كلمة المرور"><p id="login-error" class="hidden text-red-500 mb-4"></p><button type="submit" class="w-full bg-teal-600 text-white py-3 rounded-lg mb-3">دخول</button><button type="button" id="register-new-user-btn" class="w-full bg-gray-500 text-white py-3 rounded-lg">إنشاء حساب</button></form></div></div>
     <div id="chat-window" class="hidden fixed bottom-24 right-6 w-96 h-[500px] bg-white rounded-lg shadow-2xl flex flex-col z-50 overflow-hidden"><div id="chat-list-view" class="flex flex-col h-full"><div class="flex justify-between items-center p-3 bg-blue-600 text-white"><h3 class="font-bold">الدردشات</h3><button id="close-chat" class="text-2xl">&times;</button></div><div id="chat-user-info" class="p-3 border-b text-sm"><p>مرحباً، <span id="chat-username-display"></span></p></div><div class="flex-grow overflow-y-auto"><div id="chat-tab-group" class="p-4 border-b hover:bg-gray-100 cursor-pointer flex justify-between" onclick="selectChat('group','group')"><div><b>عام</b></div><span id="unread-badge-group" class="hidden bg-red-500 text-white rounded-full px-2">0</span></div><div id="chat-users-list"></div></div></div><div id="chat-message-view" class="hidden flex flex-col h-full"><div class="flex justify-between items-center p-3 bg-blue-600 text-white"><button id="chat-back-btn">رجوع</button><h3 id="chat-title">...</h3><button id="close-chat-2">&times;</button></div><div id="chat-messages" class="flex-1 p-3 overflow-y-auto bg-gray-50 space-y-3"></div><form id="message-form" class="p-3 border-t flex gap-2"><input id="message-input" class="flex-1 border rounded-full px-3 py-2"><button type="submit" class="bg-blue-500 text-white rounded-full w-10 h-10">></button></form></div></div>
-    <div id="add-item-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"><div class="bg-white rounded-lg p-6 w-full max-w-md" id="modal-content"><h3 class="text-2xl font-bold mb-4">إضافة عنصر</h3><div class="mb-4 flex gap-4"><button id="tab-link" class="w-1/2 border-b-2 border-teal-500 text-teal-600">رابط</button><button id="tab-file" class="w-1/2 border-b-2 border-transparent">ملف</button></div><form id="add-item-form"><input type="hidden" id="column-id-input"><input type="hidden" id="item-type-input" value="link"><input type="text" id="item-title" class="w-full border p-2 rounded mb-4" placeholder="العنوان"><div id="link-input-section"><input type="url" id="item-link" class="w-full border p-2 rounded mb-4" placeholder="URL"></div><div id="file-input-section" class="hidden"><input type="file" id="item-file" class="w-full"></div><div class="flex justify-end gap-3"><button type="button" id="cancel-modal" class="bg-gray-200 px-4 py-2 rounded">إلغاء</button><button type="submit" class="bg-teal-600 text-white px-4 py-2 rounded">إضافة</button></div></form></div></div>
+    <div id="add-item-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"><div class="bg-white rounded-lg p-6 w-full max-w-md" id="modal-content"><h3 class="text-2xl font-bold mb-4">إضافة عنصر</h3><div class="mb-4 flex gap-4"><button type="button" id="tab-link" class="w-1/2 border-b-2 border-teal-500 text-teal-600">رابط</button><button type="button" id="tab-file" class="w-1/2 border-b-2 border-transparent">رفع PDF</button></div><form id="add-item-form"><input type="hidden" id="column-id-input"><input type="hidden" id="item-type-input" value="link"><input type="text" id="item-title" class="w-full border p-2 rounded mb-4" placeholder="العنوان" required><div id="link-input-section"><input type="text" inputmode="url" id="item-link" class="w-full border p-2 rounded mb-4" placeholder="https://example.com"></div><div id="file-input-section" class="hidden"><input type="file" id="item-file" accept="application/pdf,.pdf" class="w-full border p-2 rounded mb-2"><p class="text-xs text-gray-500 mb-4">PDF فقط، بحد أقصى 25 ميجابايت.</p></div><div class="flex justify-end gap-3"><button type="button" id="cancel-modal" class="bg-gray-200 px-4 py-2 rounded">إلغاء</button><button type="submit" class="bg-teal-600 text-white px-4 py-2 rounded">إضافة</button></div></form></div></div>
+    <div id="share-options-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70] p-4" onclick="if(event.target===this) closeShareOptions()"><div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold text-teal-800 mb-2">طريقة الإرسال</h3><p class="text-sm text-gray-600 mb-3">يمكنك الإرسال إلى رقم غير محفوظ أو تركه فارغًا لاختيار جهة من واتساب.</p><label class="block text-sm font-bold text-gray-700 mb-1">رقم واتساب — اختياري</label><input id="share-phone-number" type="tel" inputmode="tel" dir="ltr" class="w-full border p-3 rounded-lg mb-2 text-left" placeholder="مثال: 05xxxxxxxx أو 9665xxxxxxxx"><p class="text-xs text-gray-500 mb-4">يُضاف مفتاح السعودية 966 تلقائيًا للرقم الذي يبدأ بـ05.</p><div class="space-y-3"><button type="button" onclick="sharePendingLink()" class="w-full bg-green-600 text-white px-4 py-3 rounded-lg font-bold">إرسال رابط عبر واتساب</button><button type="button" id="share-as-file-btn" onclick="sharePdfAsFile()" class="w-full bg-teal-700 text-white px-4 py-3 rounded-lg font-bold">إرسال ملف PDF نفسه</button><button type="button" onclick="closeShareOptions()" class="w-full bg-gray-200 px-4 py-2 rounded-lg">إلغاء</button></div><p class="text-xs text-gray-500 mt-4">إرسال الملف نفسه يفتح قائمة المشاركة؛ لا يستطيع المتصفح تحديد رقم غير محفوظ مع إرفاق الملف في خطوة واحدة.</p></div></div>
     <div id="add-section-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"><div class="bg-white rounded-lg p-6 w-full max-w-md" id="add-section-modal-content"><h3 class="text-2xl font-bold mb-4">إضافة قسم</h3><form id="add-section-form"><input type="hidden" id="section-icon" value="📚"><input type="text" id="section-title" class="w-full border p-2 rounded mb-4" placeholder="العنوان"><div id="add-section-icon-picker" class="icon-picker mb-4"></div><div class="flex items-center mb-4"><input id="section-visibility" type="checkbox" checked class="ml-2"><label>إظهار للجميع</label></div><div class="flex justify-end gap-3"><button type="button" id="cancel-section-modal" class="bg-gray-200 px-4 py-2 rounded">إلغاء</button><button type="submit" class="bg-teal-600 text-white px-4 py-2 rounded">إضافة</button></div><button id="close-section-modal" class="hidden"></button></form></div></div>
-    <div id="edit-section-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"><div class="bg-white rounded-lg p-6 w-full max-w-md"><h3 class="text-2xl font-bold mb-4">تعديل القسم</h3><form id="edit-section-form"><input type="hidden" id="edit-section-id"><input type="hidden" id="edit-section-icon"><input type="text" id="edit-section-title" class="w-full border p-2 rounded mb-4"><div id="edit-section-icon-picker" class="icon-picker mb-4"></div><div class="flex items-center mb-4"><input id="edit-section-visibility" type="checkbox" class="ml-2"><label>إظهار للجميع</label></div><div id="current-editors-container" class="hidden mb-4"><ul id="current-editors-list"></ul></div><div class="flex justify-end gap-3"><button type="button" id="cancel-edit-section-modal" class="bg-gray-200 px-4 py-2 rounded">إلغاء</button><button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">حفظ</button></div><button id="close-edit-section-modal" class="hidden"></button></form></div></div>
-    <div id="edit-item-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"><div class="bg-white rounded-lg p-6 w-full max-w-md"><h3 class="text-2xl font-bold mb-4">تعديل العنصر</h3><form id="edit-item-form"><input type="hidden" id="edit-item-id"><input type="hidden" id="edit-item-section-id"><input type="text" id="edit-item-title" class="w-full border p-2 rounded mb-4"><input type="url" id="edit-item-link" class="w-full border p-2 rounded mb-4"><div class="flex justify-end gap-3"><button type="button" id="cancel-edit-item-modal" class="bg-gray-200 px-4 py-2 rounded">إلغاء</button><button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">حفظ</button></div><button id="close-edit-item-modal" class="hidden"></button></form></div></div>
+    <div id="edit-section-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"><div class="bg-white rounded-lg p-6 w-full max-w-md"><h3 class="text-2xl font-bold mb-4">تعديل القسم</h3><form id="edit-section-form"><input type="hidden" id="edit-section-id"><input type="hidden" id="edit-section-icon"><input type="text" id="edit-section-title" class="w-full border p-2 rounded mb-4"><div id="edit-section-icon-picker" class="icon-picker mb-4"></div><label class="block text-sm font-bold text-gray-700 mb-2">لون رأس القسم</label><div class="flex items-center gap-3 mb-4"><input type="color" id="edit-section-color" value="#E5F7F3" class="w-16 h-11 border rounded cursor-pointer"><span class="text-sm text-gray-500">اختر لونًا هادئًا يميز هذا القسم</span></div><div class="flex items-center mb-4"><input id="edit-section-visibility" type="checkbox" class="ml-2"><label>إظهار للجميع</label></div><div id="current-editors-container" class="hidden mb-4"><ul id="current-editors-list"></ul></div><div class="flex justify-end gap-3"><button type="button" id="cancel-edit-section-modal" class="bg-gray-200 px-4 py-2 rounded">إلغاء</button><button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">حفظ</button></div><button type="button" id="close-edit-section-modal" class="hidden"></button></form></div></div>
+    <div id="edit-item-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4"><div class="bg-white rounded-lg p-6 w-full max-w-md" onclick="event.stopPropagation()"><h3 class="text-2xl font-bold mb-4">تعديل الرابط أو نقله</h3><form id="edit-item-form"><input type="hidden" id="edit-item-id"><input type="hidden" id="edit-item-section-id"><label class="block text-sm font-bold text-gray-700 mb-1">اسم الرابط</label><input type="text" id="edit-item-title" class="w-full border p-2 rounded mb-4"><label class="block text-sm font-bold text-gray-700 mb-1">الرابط</label><input type="text" inputmode="url" id="edit-item-link" class="w-full border p-2 rounded mb-4"><label class="block text-sm font-bold text-gray-700 mb-1">القسم الذي سيظهر فيه</label><select id="edit-item-target-section" class="w-full border p-2 rounded mb-2 bg-white"></select><p class="text-xs text-gray-500 mb-4">اختر قسمًا آخر لنقل الرابط إليه دون إعادة كتابته.</p><div class="flex justify-end gap-3"><button type="button" id="cancel-edit-item-modal" class="bg-gray-200 px-4 py-2 rounded">إلغاء</button><button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded">حفظ</button></div><button type="button" id="close-edit-item-modal" class="hidden"></button></form></div></div>
     <div id="alert-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60]"><div class="bg-white rounded-lg p-6 w-full max-w-sm" id="alert-modal-content"><h3 class="text-xl font-bold mb-4">تنبيه</h3><p id="alert-modal-message" class="mb-6"></p><button id="close-alert-modal" class="bg-teal-600 text-white px-4 py-2 rounded float-left">حسناً</button></div></div>
     <div id="pdf-spinner-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100]"><div class="bg-white rounded-lg p-8 text-center"><p>جاري إنشاء PDF...</p></div></div>
     <div id="admin-manage-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[70]"><div class="bg-white rounded-lg p-6 w-full max-w-lg"><h3 class="text-2xl font-bold mb-4">إدارة المستخدمين <button id="close-admin-manage-modal" class="float-left">&times;</button></h3><ul id="admin-users-list" class="max-h-96 overflow-y-auto"></ul></div></div>
